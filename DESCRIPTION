@@ -1,5 +1,5 @@
 Package: SpatioTemporal
-Version: 1.1.9.1
+Version: 1.1.9.2
 License: GPL-2
 Title: Spatio-Temporal Model Estimation
 Author: Johan Lindstrom, Adam Szpiro, Paul D. Sampson, Silas Bergen, Assaf P.
@@ -23,6 +23,3 @@ Collate: 'block_matrices.R' 'c_cov_matrices.R' 'c_F_mult.R'
         'STmodel_simulate.R' 'temporal_SVD_incomplete_data.R' 'utils.R'
 RoxygenNote: 6.0.1
 NeedsCompilation: yes
-Packaged: 2019-02-09 16:07:44 UTC; hornik
-Repository: CRAN
-Date/Publication: 2019-02-09 16:31:02 UTC
