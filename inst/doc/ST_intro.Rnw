@@ -1,0 +1,1907 @@
+\documentclass[article,shortnames,nojss]{jss}
+%% need no \usepackage{Sweave.sty}
+
+%pacakges
+\usepackage[british]{babel}
+\usepackage[latin1]{inputenc}
+\usepackage{verbatim}
+\usepackage{amsmath,amssymb,amsthm,amsfonts,amsbsy}
+\usepackage{url}
+
+\newcommand{\proper}{\mathsf}
+%Define some distributions
+\newcommand{\Normal}[2]{\proper{N}\left(#1,#2\right)}
+% Use for points, vectors, and matrices:
+\newcommand{\mv}[1]{{\boldsymbol{#1}}}
+%transpose and integration infinitesimals
+\newcommand{\trsp}{\ensuremath{\top}}
+\newcommand{\md}{\ensuremath{\,\mathrm{d}}}
+%median
+\newcommand{\median}{\operatorname{median}}
+%diag
+\newcommand{\diag}{\operatorname{diag}}
+%argmax
+\newcommand{\argmax}[1]{\underset{#1}{\operatorname{argmax}}\ }
+%norm
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+%determinant
+\renewcommand{\det}[1]{\left\lvert#1\right\rvert}
+%ordo
+\newcommand{\ordo}[1]{\ensuremath{\mathcal{O}\left(#1\right)}}
+%Caliographic M for model
+\newcommand{\M}{\mathcal{M}}
+%NOx and PM commands
+\newcommand{\no}[1]{\ensuremath{\text{NO}_\text{#1}}}
+\newcommand{\lno}[1]{\ensuremath{\log\ \no{#1}}}
+\newcommand{\PM}[1]{\ensuremath{\text{PM}_{#1}}}
+%predictions of the log-Gaussian process
+\newcommand{\Zhat}[1]{\ensuremath{\widehat{Z^*_{#1}}}}
+\newcommand{\Zhathat}[2]{\ensuremath{\widehat{\widehat{Z^*_{#2}}}^\text{\sc #1}}}
+
+\newcommand{\zhat}[1]{\ensuremath{\widehat{z^*_{#1}}}}
+\newcommand{\zhathat}[2]{\ensuremath{\widehat{\widehat{z^*_{#2}}}^\text{\sc #1}}}
+%temporal average predictions of the log-Gaussian process
+\newcommand{\zhatLTA}{\ensuremath{\widehat{ \overline{z^*} }(s)}}
+\newcommand{\zhathatLTA}[1]{\ensuremath{\widehat{\widehat{ \overline{z^*} }}^\text{\sc #1}\!\!\!\!(s)}}
+%define MSPE 
+\newcommand{\MSPE}{\proper{MSPE}}
+
+%\VignetteIndexEntry{SpatioTemporal: An R Package for Spatio-Temporal Modelling of Air-Pollution}
+
+%% almost as usual
+\author{
+Johan Lindstr\"om\\ Lund University \& University of Washington \And
+Adam Szpiro\\ University of Washington \AND
+Paul D. Sampson\\ University of Washington \And
+Silas Bergen\\ University of Washington \And
+Lianne Sheppard\\ University of Washington}
+\title{\pkg{SpatioTemporal}: An \proglang{R} Package for Spatio-Temporal Modelling of Air-Pollution}
+
+
+%% for pretty printing and a nice hypersummary also set:
+\Plainauthor{Johan Lindstr\"om, Adam Szpiro, Paul D. Sampson, Silas Bergen,
+  Lianne Sheppard} %% comma-separated
+\Plaintitle{SpatioTemporal: An R Package for Spatio-Temporal Modelling of
+  Air-Pollution} %% without formatting
+\Shorttitle{\pkg{SpatioTemporal}: Spatio-Temporal Modelling of 
+  Air-Pollution} %% a short title (if necessary)
+
+%% an abstract and keywords
+\Abstract{
+Modelling of Gaussian spatio-temporal processes provide ample opportunity for different
+model formulations, however two principal directions have emerged. The data can be
+modelled either as a set of spatially varying temporal basis functions or as
+spatial fields evolving in time. This package provides maximum-likelihood
+estimation and cross-validation tools for the first case.
+Development of the package was motivated by the need to provide accurate
+spatio-temporal predictions of ambient air pollution at small spatial scales for
+a health effects study.
+
+The package provides tools for extracting temporal basis functions from the
+data. It handles incomplete and highly unbalanced spatio-temporal sampling designs
+and allows for a flexible set of covariates and covariance structures to
+capture the spatial variability in the temporal basis functions and in the
+spatio-temporal residuals. Further, the package provides bias corrected
+predictions for log-transformed data, cross-validation tools
+and rudimentary MCMC-routines to asses the modelfit.
+
+Here we describe the package, providing a brief summary of the theory, but
+focusing our attention on an example illustrating how the package can be used
+for model fitting and cross-validation analysis; the example is based on data
+included in the package.
+}
+\Keywords{Spatio-temporal modelling, likelihood based estimation,
+  cross-validation, air pollution, \no{x} smooth EOFs, $\log$-Gaussian process,
+  unbalanced data}
+\Plainkeywords{Spatio-temporal modelling, likelihood based estimation,
+  cross-validation, air pollution, NOx, smooth EOFs, log-Gaussian process,
+  unbalanced data} %% without formatting
+%% at least one keyword must be supplied
+
+%% publication information
+%% NOTE: Typically, this can be left commented and will be filled out by the technical editor
+%% \Volume{50}
+%% \Issue{9}
+%% \Month{June}
+%% \Year{2012}
+%% \Submitdate{2012-06-04}
+%% \Acceptdate{2012-06-04}
+
+%% The address of (at least) one author should be given
+%% in the following format:
+\Address{
+  Johan Lindstr\"om\\
+  Mathematical Statistics\\
+  Centre for Mathematical Sciences\\
+  Lund University\\
+  Box 118, SE-221 00 Lund, Sweden\\
+  E-mail: \email{johanl@maths.lth.se}\\
+  URL: \url{http://www.maths.lth.se/~johanl}
+}
+
+%% Note that you should use the \pkg{}, \proglang{} and \code{} commands.
+\begin{document}
+<<echo=FALSE>>=
+##initial set-up: load libraries
+library(SpatioTemporal)
+library(Matrix)
+library(plotrix) 
+library(maps)
+@ 
+
+\section{Introduction} \label{sec:intro}
+\proglang{R} \citep{R2013} package \pkg{SpatioTemporal} provides 
+functions for fitting and evaluation of a class of Gaussian spatio-temporal
+processes that are based on spatially varying temporal basis functions, with
+spatially correlated residuals. 
+
+Development of \pkg{SpatioTemporal} was motivated by the
+need, in the Multi-Ethnic Study of Atherosclerosis and Air Pollution (MESA Air),
+for accurate predictions of ambient air pollution. 
+MESA Air is a cohort study funded by the Environmental
+Protection Agency (EPA) with the aim of assessing the relationship between
+chronic exposure to air pollution and the progression of sub-clinical
+cardiovascular disease \citep{Kaufman12}. A primary focus of the MESA Air study
+is the development of accurate predictions of ambient air pollution
+\citep{Bild02,Kaufman12} --- primarily gaseous oxides of nitrogen (\no{x}) and
+particulate matter with aerodynamic diameter less than $2.5\ \mu\text{m}$
+(\PM{2.5}) --- at the home locations of study participants in six major US
+metropolitan areas: Los Angeles, CA; New York, NY; Chicago, IL; 
+Minneapolis-St.~Paul, MN; Winston-Salem, NC; and Baltimore, MD.
+
+To fullfill the prediction needs of MESA Air the spatio-temporal model
+implemented in this package has been developed in a series of papers
+\citep{Szpiro10a, Sampson11, Lindstrom11a, Lindstrom13}. The model is based on
+the notion of spatially varying smooth temporal basis functions \citep[see e.g.\
+Sec.~3 in][]{Fuentes06}, and represents one of many different ways that
+spatio-temporal dependencies can be modelled.
+
+Several general overviews of statistical modeling approaches for spatially and
+spatio-temporally correlated data exist \citep{Banerjee04, CressieWikle11},
+including non-separable spatio-temporal covariance functions
+\citep{GneitingGuttorpHSS10} and dynamic model formulations
+\citep{GamermanHSS10}. There are also several methods developed specifically for
+the modelling of air pollution data \citep{Smith03, Sahu06, Calder08, Fanshawe08,
+  Paciorek09, DeIaco2012}. Additionally, other \proglang{R} packages that handle
+spatio-temporal models and data are summarised in the relevant task view
+(\url{http://CRAN.R-project.org/view=SpatioTemporal}) on the Comprehensive
+\proglang{R} Archive Network (CRAN) \url{http://CRAN.R-project.org}
+
+The main purposes of this paper are to: 1) introduce \pkg{SpatioTemporal}
+to \proglang{R} users, 2) present details regarding the model and its
+implementation necessary for users to fully understand and analys output from
+the package, 3) demonstrate the use of \pkg{SpatioTemporal} by analysing an
+example data-set, and 4) provide an outlook of future features that may be added
+to the package.
+
+This paper starts with an outline of the model and theory in
+Section~\ref{sec:theory}, including details regarding the smooth temporal basis
+functions (Section~\ref{sec:temporal_basis}), estimation
+(Section~\ref{sec:estimation}), prediction (Section~\ref{sec:prediciton}), and
+cross-validation (Section~\ref{sec:CV}). This is followed by a description of
+key package features and assumptions in Section~\ref{sec:features} and an example
+analysis of Los Angeles \no{x} data in
+Section~\ref{sec:example}. Section~\ref{sec:Outlook} concludes with an outlook
+towards possible future features.
+
+Results in this paper were obtained using version 1.1.7 of
+\pkg{SpatioTemporal}. The current version of the package can be obtained from
+CRAN at \url{http://CRAN.R-project.org/package=SpatioTemporal}.
+
+%%TODO change to reference to JSS-paper
+A longer vignette providing detailed descriptions of function outputs and
+elaborating on features not covered here (e.g.\ simulation) is included as
+\code{vignette("ST\_tutorial", package="SpatioTemporal")}.
+
+
+\section{Model and Theory} \label{sec:theory}
+We are interested in models of the form
+\begin{equation}
+ y(s,t) = \mu(s,t) + \nu(s,t),
+ \label{eqn:model_decomp}
+\end{equation}
+where $y(s,t)$ denotes the spatio-temporal observations, $\mu(s,t)$ is the
+structured mean field, and $\nu(s,t)$ is the space-time residual field. 
+
+The mean field is modelled as 
+\begin{equation}
+ \mu(s,t) = \sum_{l=1}^L \gamma_l \M_l(s,t) + \sum_{i=1}^{m} \beta_i(s) f_i(t),
+ \label{eqn:mean_model}
+\end{equation}
+where the $\M_l(s,t)$ are spatio-temporal covariates; $\gamma_l$ are coefficients
+for the spatio-temporal covariates; $\{f_i(t)\}_{i=1}^m$ is a set of (smooth) temporal basis
+functions, with $f_1(t)\equiv 1$; and the $\beta_i(s)$ are spatially varying coefficients
+for the temporal functions.
+
+The $\beta_i(s)$-coefficients in \eqref{eqn:mean_model} are treated as spatial
+fields with a universal kriging structure, allowing the temporal structure to
+vary between locations:
+\begin{equation}
+ \beta_i(s) \in \Normal{X_i \alpha_i}{\Sigma_{\beta_i}(\theta_i)} \quad \text{for }
+  i=1,\ldots,m ,
+\label{eqn:beta_fields}
+\end{equation}
+where $X_i$ are $n\,\times\,p_i$ design matrices, $\alpha_i$ are $p_i\,\times\,1$
+matrices of regression coefficients, and $\Sigma_{\beta_i}(\theta_i)$ are
+$n\,\times\,n$ covariance matrices. The $X_i$ matrices often contain
+geographical covariates and we dentote this component a ``land use'' regression
+(LUR). This structure allows for different covariates and covariance structures
+in the each of the $\beta_i(s)$ fields; the fields are assumed to be apriori
+independent of each other.
+
+The residual space-time field, $\nu(s,t)$, is assumed to
+be independent in time with stationary, parametric spatial covariance
+\begin{equation}
+ \nu(s,t) \in \Normal{0}{\underbrace{\begin{bmatrix}
+                     \Sigma_\nu ^1(\theta_\nu) & 0 & 0 \\
+                     0 & \ddots & 0 \\
+                     0 & 0 & \Sigma_\nu^T(\theta_\nu)
+                     \end{bmatrix}}_{\Sigma_\nu(\theta_\nu)}},
+\label{eqn:nu_fields}
+\end{equation}
+or
+\begin{align*}
+\nu(s,t) &\in \Normal{0}{\Sigma_\nu ^t(\theta_\nu)}\ \text{for}\ t=1,\ldots,T &
+ &\text{and} &
+ \nu(s_1,t_1) &\perp \nu(s_2,t_2),\ t_1 \neq t_2.
+\end{align*}
+Here the size of each block matrix, $\Sigma_\nu^t(\theta_\nu)$, is the number of
+observations, $n_t$, at each time-point. Conceptually the $\nu$-field consists
+of a correlated component, $\nu^*$, and an uncorrelated nugget-effect
+comprising small-scale variability and measurement errors, $\nu_\text{nugget}$, i.e.:
+\begin{align}
+  \nu(s,t) &= \nu^*(s,t) + \nu_\text{nugget}(s,t) & 
+  &\text{and} &
+  \Sigma_\nu &= \Sigma^*_\nu + \Sigma_{\nu,\text{nugget}},
+\label{eqn:nu_field_nugget}
+\end{align}
+where $\Sigma_{\nu,\text{nugget}}$ is a diagonal matrix.
+
+The temporal independence in \eqref{eqn:nu_fields} is based on the assumption
+that the temporal basis, $\{f_i(t)\}_{i=1}^m$, in \eqref{eqn:mean_model} accounts
+for the temporal correlation in data. A summary of the notation can be found in
+Table~\ref{tbl:notation}.
+
+\begin{table}[htb]
+\caption{Important notation and symbols}
+\begin{tabular}{c|p{9cm}}
+Symbol & Meaning \\ \hline
+$y(s,t)$ & Spatio-temporal observations. \\
+$y_u(s,t)$ & Spatio-temporal process at the un-observed locations/times. \\
+$y^*(s,t)$ & Smoothed version of the spatio-temporal process (i.e.\ excl.\ nugget). \\
+$z(s,t)$ & The log-Gaussian process, $z(s,t)=\exp(y(s,y))$. \\
+$\mu(s,t)$ & Mean field part of $y(s,t)$. \\
+$\nu(s,t)$ & Space-time residual part of $y(s,t)$. \\
+$f_i(t)$ & Smooth temporal basis functions. \\
+$\beta_i(s)$ & Spatially varying regression coefficients, weighing the $i$:th
+               temporal basis differently at each location. \\
+$X_i$ & Land use regression (LUR) basis functions for the spatially varying
+        regression coefficients in $\beta_i(s)$. \\
+$\alpha_i$ & Regression coefficients for the $i$:th LUR-basis. \\
+$\M_l(s,t)$ & Spatio-temporally varying covariates.\\
+$\gamma_l$ & Regression coefficient for the spatio-temporally varying covariates. \\
+$N$ & No.\ of observations. \\
+$T$ & No.\ of observed time-points. \\
+$n$ & No.\ of observed locations. \\
+$n_t$ & No.\ of observations at time $t$ ($N=\sum_{t=1}^T n_t$ and $n_t \leq n\ \forall t$. \\
+$m$ & No.\ of temporal basis functions (incl.\ intercept).\\
+$L$ & No.\ of spatio-temporal model outputs. \\
+$p_i$ & No.\ of LUR-basis functions for the $i$:th temporal-basis.
+\end{tabular}
+\label{tbl:notation}
+\end{table}
+
+To simplify the model we introduce a sparse $N\,\times\,mn$-matrix
+$F=(f_{st,is^\prime})$ with elements
+\begin{align}
+f_{st,is^\prime} = \begin{cases}
+ f_i(t) & s=s^\prime, \\
+ 0 & \text{otherwise},
+\end{cases}
+\label{eqn:F_matrix}
+\end{align}
+along with the $N\,\times\,1$-vectors $Y=y(s,t)$, $V=\nu(s,t)$, and
+$\M_l(s,t)$ by stacking the elements into single vectors varying first $s$
+and then $t$, i.e.\ (assuming that the corresponding observations exist)
+\begin{align*}
+Y = \begin{bmatrix} y(s_1,1) & y(s_2,1) & \cdots & y(s_1,2) & y(s_2,2) & \cdots
+  & y(s_n,T)
+\end{bmatrix}^\trsp.
+\end{align*}
+The unknown regression and covariance parameters of the model are are collected
+into column vectors
+\begin{align*}
+\mv{\gamma} &= \begin{bmatrix} \gamma_1 & \cdots & \gamma_L \end{bmatrix}^\trsp, &
+\mv{\alpha} &= \begin{bmatrix} \alpha_1^\trsp & \cdots &
+  \alpha_m^\trsp \end{bmatrix}^\trsp, &
+\theta_B &= \{\theta_i\}_{i=1}^m, &
+\Psi &= \{\theta_B, \theta_\nu\},
+\end{align*}
+and all spatio-temporal covariates are gathered in a $N\,\times\,L$-matrix,
+$\M = \begin{bmatrix} \M_1 & \cdots & \M_L \end{bmatrix}$. Components of
+the $\beta_i$-fields are assembled into block matrices as
+\begin{align}
+B &= \begin{bmatrix}\beta_1(s) \\ \vdots \\ \beta_m(s) \end{bmatrix}, &
+X &= \begin{bmatrix}
+      X_1 &    0   & 0 \\
+        0 & \ddots & 0 \\
+        0 &    0   & X_m
+     \end{bmatrix},
+&
+\Sigma_B(\theta_B) &= \begin{bmatrix}
+                     \Sigma_1 (\theta_1) & 0 & 0 \\
+                     0 & \ddots & 0 \\
+                     0 & 0 & \Sigma_m(\theta_m)
+                     \end{bmatrix}.
+\label{eqn:block_matrix}
+\end{align}
+Using these matrices \eqref{eqn:model_decomp} can be written as
+\begin{align}
+ Y &=  \M \mv{\gamma} + FB + V, &
+ &\text{where} &
+B &\in \Normal{X \mv{\alpha}}{\Sigma_B(\theta_B)} &
+ &\text{and} &
+V &\in \Normal{0}{\Sigma_\nu(\theta_\nu)}.
+\label{eqn:model_matrix}
+\end{align}
+Since \eqref{eqn:model_matrix} is a linear combinations of independent
+Gaussians we introduce the matrices
+\begin{align}
+\widetilde{X} &= \begin{bmatrix} \M & FX \end{bmatrix} &
+ &\text{and} &
+\widetilde{\Sigma}(\Psi) &= \Sigma_\nu(\theta_\nu) + F \Sigma_B(\theta_B) F ^\trsp,
+\label{eqn:tilde_matrices}
+\end{align}
+and write the distribution of $Y$ as
+\begin{equation}
+[ Y \vert \Psi,\mv{\gamma},\mv{\alpha} ] \in
+  \Normal{\widetilde{X} \begin{bmatrix}\mv{\gamma} \\ \mv{\alpha} \end{bmatrix}}
+         {\widetilde{\Sigma}(\Psi)}.
+\label{eqn:distr_Y}
+\end{equation}
+Having defined the model the following Sections discuss:
+\ref{sec:temporal_basis}) specification of the (smooth) temporal basis functions,
+\ref{sec:estimation}) parameter estimation,
+\ref{sec:prediciton}) prediction, and
+\ref{sec:CV}) model evaluation through cross-validation. 
+
+
+\subsection{Smooth Temporal Functions} \label{sec:temporal_basis}
+The objective of the smooth temporal basis functions, $f_i(t)$, is to capture
+the temporal variability in the data. These functions can either be specified as
+{\em deterministic functions}, or obtained as {\em smoothed singular vectors}
+\citep[See][for details.]{Fuentes06}.
+
+To derive the $m-1$ smoothed singular vectors ($m-1$ since $f_1(t)\equiv 1$) we
+first construct the $T\,\times\,n$ data matrix 
+\begin{align}
+  D(t,s) = \begin{cases} 
+    y(t,s), & \text{if the observation } y(t,s) \text{ exists}, \\
+    \text{NA}, & \text{otherwise,}
+  \end{cases}
+  \label{eqn:data_matrix}
+\end{align}
+and fill in missing observations using the algorithm described by
+\citet{Fuentes06}:
+\begin{enumerate}
+\item[Step 0] Centre and scale each column (to mean zero, variance one) and
+  compute the mean of all available observations for each time-point,
+  $u_1(t)$. Missing values in $D(t,s)$ are then imputed using fitted values from a
+  linear regression where each column of $D(t,s)$ is regressed onto $u_1$. For this
+  step to be well defined the data matrix must have {\em at least one}
+  observation in each {\em row and column}.
+\item[Step 1.] Compute the SVD (singular value decomposition) of the new data
+  matrix with the missing values imputed. 
+\item[Step 2.] Do regression of each column of the new data matrix on the first
+  $m-1$ orthogonal basis functions from Step 1. The  missing values are then
+  replaced by the fitted values of this regression. 
+\item[Step 3.] Repeat from Step 1 until convergence; convergence being 
+  measured by the change in the imputed values between iterations.
+\end{enumerate}   
+Having imputed the missing values in $D(t,s)$ we then use splines to smooth
+the leading $m-1$ singular vectors, i.e. the $m-1$ first columns of $U$ in the SVD:
+$D = U S V^\trsp$.
+
+Cross-validation can be used to determine the number of smooth temporal basis
+functions needed to capture the temporal variability in data. In a
+cross-validation the $j^\text{th}$ column of $D(t,s)$ is held out, smooth
+temporal functions are computed for the reduced matrix as above, and the
+functions are evaluated by how well they explain the held out $j^\text{th}$
+column of $D(t,s)$. Repeating for all columns in $D(t,s)$ we obtain a set of
+regression statistics describing how well the left out columns are explained by
+smooth temporal functions based on the remaining columns. The computed
+statistics --- mean squared errors (MSE), $R^2$, AIC 
+(Akaike information criterion), and BIC (Bayesian information criterion) --
+together with correlation analysis of temporal residuals (recall the assumption
+of temporal independence in \eqref{eqn:nu_fields}) are used to determine a
+suitable number of temporal basis functions; an example is provided in
+Section~\ref{sec:Ex_trends}.
+
+
+\subsection{Parameter Estimation} \label{sec:estimation}
+Parameter estimates are obtained by maximising the log-likelihood of
+\eqref{eqn:distr_Y}
+\begin{equation}
+\begin{split}
+  2 l(\Psi,\alpha,\gamma \vert Y) =&
+  - N\log(2\pi) - \log\det{\widetilde{\Sigma}(\Psi)}
+  \\ &
+ - \left(Y - \widetilde{X} \begin{bmatrix}\mv{\gamma}
+   \\ \mv{\alpha} \end{bmatrix} \right)^\trsp \widetilde{\Sigma}^{-1}(\Psi)
+   \left(Y - \widetilde{X} \begin{bmatrix}\mv{\gamma}
+   \\ \mv{\alpha} \end{bmatrix} \right).
+\end{split}
+\label{eqn:full_likelihood}
+\end{equation}
+Here $\widetilde{\Sigma}$ is a dense $N\,\times\,N$-matrix and to obtain a
+computationaly feasable solution that utlizes the block diagonal structure of
+$\Sigma_\nu$ and $\Sigma_B$ \citet{Lindstrom11a,Lindstrom13} simplified the
+log-likelihood by application of various matrix identities, including the
+Woodbury identity \citep[Thm.~18.2.8][]{Harville97} 
+\begin{equation}
+ \widetilde{\Sigma}^{-1} = \Sigma_\nu^{-1} - \Sigma_\nu^{-1} F 
+    \left(\Sigma_B^{-1} + F^\trsp \Sigma_\nu^{-1} F\right)^{-1}
+     F^\trsp \Sigma_\nu^{-1},
+\label{eqn:sigma_nu_woodbury}
+\end{equation}
+and replaced $\mv{\gamma},\ \mv{\alpha}$ with the generalised least squares
+estimates
+\begin{equation}
+  \begin{bmatrix} \widehat{\mv{\gamma}} \\ \widehat{\mv{\alpha}} \end{bmatrix} =
+  \left( \widetilde{X}^\trsp \widetilde{\Sigma}^{-1} \widetilde{X}\right)^{-1}
+  \left( \widetilde{X}^\trsp \widetilde{\Sigma}^{-1} Y \right).
+  \label{eqn:alpha_gamma}
+\end{equation}
+
+Introducing the matrices
+\begin{subequations}
+\label{eqn:matrix_defns}
+\begin{align}
+ \Sigma_{B\vert Y}^{-1} =& \Sigma_B^{-1} + F^\trsp \Sigma_\nu^{-1} F,
+\label{eqn:sigma_B_C}
+\\
+ \Sigma_{\alpha\vert Y}^{-1} =& X^\trsp \Sigma_B^{-1} X -
+    X^\trsp \Sigma_B^{-1} \Sigma_{B\vert Y} \Sigma_B^{-1} X,
+\label{eqn:sigma_alpha_C}
+\\
+\begin{split}
+ \widehat{\Sigma} =& \Sigma_\nu^{-1} - \Sigma_\nu^{-1} F \Sigma_{B\vert Y} F^\trsp \Sigma_\nu^{-1}
+\\&
+- \Sigma_\nu^{-1} F \Sigma_{B\vert Y} \Sigma_B^{-1} X \Sigma_{\alpha\vert Y}
+   X^\trsp \Sigma_B^{-1} \Sigma_{B\vert Y} F^\trsp \Sigma_\nu^{-1},
+\end{split}
+\label{eqn:sigma_hat}
+\end{align}
+\end{subequations}
+and using \eqref{eqn:alpha_gamma} the log-likelihood \eqref{eqn:full_likelihood}
+can be replaced by the corresponding profile or restricted maximum
+log-likelihood (REML):
+\begin{equation}
+\begin{split}
+2 l_\text{\sc prof}(\Psi \vert Y) =&
+ - \log\det{\Sigma_\nu(\theta_\nu)}
+ - \log\det{\Sigma_B(\theta_B)}
+ - \log\det{\Sigma_{B\vert Y}^{-1}(\Psi)}
+ - Y^\trsp \widehat{\Sigma}(\Psi) Y
+\\&
+ + Y^\trsp \widehat{\Sigma}(\Psi) \M
+   \Bigl( \M^\trsp \widehat{\Sigma}(\Psi) \M \Bigr)^{-1}
+   \M^\trsp \widehat{\Sigma}(\Psi) Y + \text{const.}
+\end{split}
+\label{eqn:profile_likelihood}
+\end{equation}
+or
+\begin{equation}
+2 l_\text{\sc reml}(\Psi \vert Y) = 2 l_\text{\sc prof}(\Psi \vert Y)
+-\log\det{\M^\trsp \widehat{\Sigma}(\Psi) \M} -\log\det{\Sigma_{\alpha\vert Y}^{-1}(\Psi)}
+\label{eqn:REML_likelihood}
+\end{equation}
+respectively. Parameter estimates are obtained by maximisation of either
+\eqref{eqn:profile_likelihood} or \eqref{eqn:REML_likelihood} as
+\begin{align}
+ \widehat{\Psi}_\text{\sc prof} &= \argmax{\Psi} l_\text{\sc prof}(\Psi \vert Y),
+ & &\text{or} &
+ \widehat{\Psi}_\text{\sc reml} &= \argmax{\Psi} l_\text{\sc reml}(\Psi \vert Y).
+\label{eqn:parameter_estimation}
+\end{align}
+
+
+\subsection{Predictions} \label{sec:prediciton}
+Given the structure of the model \eqref{eqn:model_decomp} with a mean component
+\eqref{eqn:mean_model} and $\beta$-fields \eqref{eqn:beta_fields} the
+contribution to any predictions of unobserved $Y$'s can be decomposed in to
+parts due to the regression model: $\M\gamma+FX\alpha$, the $\beta$-fields:
+$\M\gamma + FB$, and the full predictions. These different predictions are 
+illustrated in Figure~\ref{fig:predict_example}, using data from the example in
+Section~\ref{sec:example}. The different predicitons play an important part in
+model evaluation by highlighting at which level of the model different featurs
+of the data are captured.
+
+First, given observations, $Y$, and estimates of the covariance parameters, $\Psi$,
+the regression coefficients are given by \eqref{eqn:alpha_gamma} with variances 
+\begin{equation*}
+  \VAR\left( \begin{bmatrix} \widehat{\mv{\gamma}}
+    \\ \widehat{\mv{\alpha}} \end{bmatrix} \middle\vert Y, \Psi \right) =
+  \left( \widetilde{X}^\trsp \widetilde{\Sigma}^{-1} \widetilde{X}\right)^{-1}.
+\end{equation*}
+
+Before providing predictions for $\beta$ and $Y$ some notation is needed.
+Let $\M_u$, $X_u$ and $F_u$ denote spatio-temporal covariates, geographic
+covariates, and temporal basis funcions at unobserved locations/times. Further,
+$B_u$ denotes the collection of $\beta$-fields at the unobserved locations,
+$\Sigma_{B,uo}$ and $\Sigma_{\nu,uo}$ are the cross-covariance matrices between
+observed and unobserved points, and $\Sigma_{B,uu}$ and $\Sigma_{\nu,uu}$ are
+the covariance matrices for unobserved points. Using this notation relevant
+variations on the matrices in \eqref{eqn:tilde_matrices} are
+\begin{align}
+\widetilde{X}_u &= \begin{bmatrix} \M_u & F_u X_u \end{bmatrix} &
+ &\text{and} &
+\widetilde{\Sigma}_{uo} &= \Sigma_{\nu,uo} + F_u \Sigma_{B,uo} F ^\trsp.
+\label{eqn:tilde_matrices_unobs}
+\end{align}
+
+
+\subsubsection[Prediction of beta-fields]{Prediction of $\beta$-fields}
+Treating \eqref{eqn:model_matrix} as a hierarchical model straight forward but
+tedious calculations give predictions for the $\beta$-fields as
+\begin{equation}
+  \E\left( B_u  \middle\vert Y, \Psi \right) =
+   X_u \widehat{\mv{\alpha}} + \Sigma_{B,uo} F^\trsp \widetilde{\Sigma}^{-1}
+  \left(Y - \widetilde{X} \begin{bmatrix} \widehat{\mv{\gamma}}
+    \\ \widehat{\mv{\alpha}} \end{bmatrix} \right),
+  \label{eqn:EX_beta}
+\end{equation}
+with variance
+\begin{equation}
+\begin{split}
+  \VAR\left( B_u \middle\vert Y, \Psi, \mv{\alpha}, \mv{\gamma} \right) =&
+  \Sigma_{B,uu} - \Sigma_{B,uo} \Sigma_B^{-1} \Sigma_{B,ou} +
+  \Sigma_{B,uo} \Sigma_B^{-1} \Sigma_{B\vert Y} \Sigma_B^{-1} \Sigma_{B,ou}
+ \\=&                 
+  \Sigma_{B,uu} - \Sigma_{B,uo} F^\trsp \Sigma_\nu^{-1} F \Sigma_{B\vert Y}
+                 \Sigma_B^{-1} \Sigma_{B,ou}.
+\end{split}
+  \label{eqn:VX_beta}
+\end{equation}
+Here, the first two terms in the top line of \eqref{eqn:VX_beta} contain the
+standard spatial prediction uncertainty for $\beta$, the last term is the
+added uncertainty from estimating $\beta$ at the observed locations given $Y$.
+The variance in \eqref{eqn:VX_beta} is conditional on both regression and
+covariance parameters, adding the uncertainty in the regression
+coefficients the variance becomes
+\begin{equation}
+\begin{split}
+  \VAR\left( B_u \middle\vert Y, \Psi \right) =&
+  \VAR\left( B_u \middle\vert Y, \Psi, \mv{\alpha}, \mv{\gamma} \right) +
+  \left(\begin{bmatrix} 0 & X_u \end{bmatrix} - \Sigma_{B,uo} F^\trsp
+        \widetilde{\Sigma}^{-1} \widetilde{X} \right) \cdot
+  \\&
+  \left( \widetilde{X}^\trsp \widetilde{\Sigma}^{-1} \widetilde{X}\right)^{-1}
+  \left(\begin{bmatrix} 0 & X_u \end{bmatrix} - \Sigma_{B,uo} F^\trsp
+        \widetilde{\Sigma}^{-1} \widetilde{X} \right)^\trsp.
+\end{split}
+  \label{eqn:VX_REML_beta}
+\end{equation}
+For $\beta$-fields at observed locations \eqref{eqn:EX_beta} and
+\eqref{eqn:VX_beta} simplify to
+\begin{align*}
+  \E\left( B \middle\vert Y, \Psi \right)
+  =& X \widehat{\mv{\alpha}} + \Sigma_{B\vert Y} F^\trsp \Sigma_\nu^{-1}
+  \left(Y - \widetilde{X} \begin{bmatrix} \widehat{\mv{\gamma}}
+    \\ \widehat{\mv{\alpha}} \end{bmatrix} \right),
+\\
+  \VAR\left( B \middle\vert Y, \Psi, \mv{\alpha}, \mv{\gamma} \right) =&
+    \Sigma_{B\vert Y}.
+\end{align*}
+
+
+\subsubsection{Prediction of Y}
+The model \eqref{eqn:distr_Y} is multivariate Normal and the full predictions of
+unobserved Y's are in principal standard kriging estimates. For the
+predictions we are primarily interested in the smooth underlying field, denoted 
+$Y^*$; this can also been interpreted as smoothing over the nugget in
+\eqref{eqn:nu_field_nugget}  \citep[Ch.~3.2.1]{Cressie93}.
+The predictions of $Y^*$ and $Y$ \emph{differ only at observed locations}.
+
+Using \eqref{eqn:tilde_matrices} and \eqref{eqn:tilde_matrices_unobs} 
+predictions for $Y^*_u$ are
+\begin{equation}
+  \begin{split}
+  \E\left( Y^*_u \middle\vert Y, \Psi \right) &= 
+  \widetilde{X}_u \begin{bmatrix} \widehat{\mv{\gamma}} \\
+    \widehat{\mv{\alpha}} \end{bmatrix} + 
+  \widetilde{\Sigma}^*_{uo} \widetilde{\Sigma}^{-1} 
+  \left(Y - \widetilde{X} 
+    \begin{bmatrix} \widehat{\mv{\gamma}} \\
+      \widehat{\mv{\alpha}} \end{bmatrix} \right),
+  \end{split}
+  \label{eqn:EX}
+\end{equation}
+with variances
+\begin{subequations}
+  \label{eqn:VX_Y}
+  \begin{align}
+    \VAR\left( Y^*_u \middle\vert Y, \Psi, \mv{\alpha}, \mv{\gamma} \right) =&
+    \widetilde{\Sigma}^*_{uu} - \widetilde{\Sigma}^*_{uo}
+    \widetilde{\Sigma}^{-1} \widetilde{\Sigma}^*_{ou} 
+    \label{eqn:VX}
+    \\
+    \VAR\left( Y_u \middle\vert Y, \Psi, \mv{\alpha}, \mv{\gamma} \right) =&
+    \widetilde{\Sigma}_{uu} - \widetilde{\Sigma}^*_{uo}
+    \widetilde{\Sigma}^{-1} \widetilde{\Sigma}^*_{ou}
+    \label{eqn:VX_pred}
+  \end{align}
+\end{subequations}
+Here $\widetilde{\Sigma}^*_{uo}$ is the cross-covariance matrix {\em excluding} 
+the nugget in $\nu$, cf.~\eqref{eqn:nu_field_nugget}; this distinction is only
+relevant when $Y^*_u$ includes observed points. For the prediction variances,
+\eqref{eqn:VX} gives the uncertainty in the prediction of the underlying
+$y^*$-field, while \eqref{eqn:VX_pred} gives the uncertainty for a new
+observations at this point; the difference is similar to that between
+confidence and prediction intervals in regression \citep[Ch.~11.3.5
+in][]{CasellaBerger02} and is of importance for the cross-validation.
+As for \eqref{eqn:VX_beta},  \eqref{eqn:VX_Y} is conditional on both regression
+and covariance parameters, accounting for uncertainty in the regression
+coefficients gives
+\begin{equation}
+  \begin{split}
+    \VAR\left( Y^*_u \middle\vert Y, \Psi\right) =&
+    \VAR\left( Y^*_u \middle\vert Y, \Psi, \mv{\alpha}, \mv{\gamma} \right) +
+    \\ &
+    \left(\widetilde{X}_u -  \widetilde{\Sigma}^*_{uo} \widetilde{\Sigma}^{-1}
+      \widetilde{X} \right)
+    \left( \widetilde{X}^\trsp \widetilde{\Sigma}^{-1} \widetilde{X}\right)^{-1}
+    \left(\widetilde{X}_u -  \widetilde{\Sigma}^*_{uo} \widetilde{\Sigma}^{-1}
+      \widetilde{X} \right)^\trsp
+  \end{split}
+  \label{eqn:VX_REML_Y}
+\end{equation}
+for \eqref{eqn:VX} and similarly for \eqref{eqn:VX_pred}.
+
+
+For unobserved time-points it should be noted that the lack of temporal
+correlation in $\nu$ implies that predictions of $y(s,t_u)$ are identical to the
+contribution from the $\beta$-fields in \eqref{eqn:EX_beta} (see
+Figure~\ref{fig:predict_example}), 
+\begin{align*}
+  \E\left(y(s,t_u) \middle\vert Y, \Psi \right) =
+  \M_u \widehat{\mv{\gamma}} + F_u \E\left(B_u \middle\vert Y, \Psi \right).
+\end{align*}
+The prediciton variance for unobserved time-points,
+\begin{align*}
+  \VAR\left(y(s,t_u) \middle\vert Y, \Psi, \mv{\alpha}, \mv{\gamma} \right) =
+  F_u\, \VAR\left(B_u \middle\vert Y, \Psi, \mv{\alpha}, \mv{\gamma} \right) 
+  F_u^\trsp + \Sigma_{\nu,uu},
+\end{align*}
+will typically be much larger than for observed time-points due to the
+added uncertainty from the completely unknown $\nu(s,t_u)$-field.
+
+<<eval=TRUE, echo=FALSE>>=
+##load precomputed results
+data(mesa.data.raw, package="SpatioTemporal")
+data(mesa.model, package="SpatioTemporal")
+data(est.mesa.model, package="SpatioTemporal")
+  
+##create model without spatiotemporal covariate 
+##(needed to be able to add time-points)
+mesa.data <- createSTdata(mesa.data.raw$obs, mesa.data.raw$X, n.basis=2,
+                          SpatioTemporal=mesa.data.raw["lax.conc.1500"])
+mesa.model <- createSTmodel(mesa.data, LUR=mesa.model$LUR.list, 
+                            ST=NULL, cov.beta=mesa.model$cov.beta, 
+                            cov.nu=mesa.model$cov.nu,
+                            locations=mesa.model$locations.list)
+
+##restrict mesa.data to one location
+mesa.model.obs <- dropObservations(mesa.model,
+                                   mesa.model$obs$ID == "60590007")
+  
+##restrict mesa.data to one location
+mesa.data$covars <- mesa.data$covars[mesa.data$covars$ID=="60590007",,drop=FALSE]
+mesa.data$obs <- mesa.data$obs[mesa.data$obs$ID=="60590007",,drop=FALSE]
+mesa.data$SpatioTemporal <- NULL
+##add more temporal points (every 3.5 days)
+mesa.data.2 <- updateTrend(mesa.data, fnc=mesa.data$trend.fnc,
+                           extra.dates=seq(min(mesa.data$trend$date),
+                             max(mesa.data$trend$date), by=3.5))
+  
+##nugget (using first value is fine; it is an AQS-site)
+pars <- coef(est.mesa.model, pars="cov")$par
+nugget <- loglikeSTgetPars(pars, mesa.model)$cov.nu$nugget[1]
+  
+##predictions at this location (every 14 days)
+pred <- predict(mesa.model.obs, pars, mesa.data,
+                nugget.unobs=nugget)
+##new predictions
+pred.2 <- predict(mesa.model.obs, pars,  mesa.data.2,
+                  nugget.unobs=nugget)
+
+##predictions for log-field
+pred.log <- predict(mesa.model.obs, pars, mesa.data,
+                    nugget.unobs=nugget, transform="unbiased", 
+                    type="p")
+pred.log.2 <- predict(mesa.model.obs, pars, mesa.data.2,
+                      nugget.unobs=nugget, transform="unbiased", 
+                      type="p")
+@ 
+<<label=figPredictExample, eval=FALSE, echo=FALSE>>=
+##prediction interval for additional time-points
+plot(pred.2, ID="60590007", main="Predictions at AQS 60590007",
+     xlab="", ylab="NOx (log pbb)", xaxt="n",
+     xlim=as.Date(c("2006-07-01","2007-01-01")),
+     ylim=c(2.3,5.2), pch=NA, pred.var=TRUE,
+     lty=NA, col=c(1,1,"lightgrey"))
+##prediction interval for original timepoints
+plot(pred, ID="60590007", pred.var=TRUE, add=TRUE, 
+     lty=NA, pch=NA, col=c(1,1,"darkgrey"))
+##confidence interval for original timepoints
+plot(pred, ID="60590007", add=TRUE, lty=NA, pch=NA, col=c(1,1,"white"))
+##predictions for additional time-points, due to mean component
+plot(pred.2, ID="60590007", add=TRUE, pred.type = "EX.mu", 
+     lty=c(4,NA), lwd=2, pch=NA, col=c(1,NA,NA))
+##predictions for additional time-points
+plot(pred.2, ID="60590007", add=TRUE, pred.type = "EX", 
+     lty=c(1,NA), lwd=2, pch=NA, col=c(1,NA,NA))
+##predictions for additional time-points, due to beta-field
+plot(pred.2, ID="60590007", add=TRUE, pred.type = "EX.mu.beta", 
+     lty=c(2,NA), lwd=2, pch=NA, col=c("green",NA,NA))
+##observations and predictions at original time-scale
+plot(pred, ID="60590007", STmodel=mesa.data.2, add=TRUE, 
+     pred.type = "EX", lty=NA, pch=c(3,4), col=c(1,2,NA))
+@ 
+
+\subsubsection{Temporal averages}
+A primary interest in MESA Air is the health effects of chronic exposure to air
+pollution. Thus we are interested in the long term average exposure at each location,
+$\overline{y}(s) = \left( \sum_t y(s,t) \right) / T$. Predictions and
+uncertainties of temporal averages are given by
+\begin{subequations}
+  \label{eqn:LTA}
+  \begin{align}
+  \E\left( \overline{y^*}(s) \middle\vert Y, \Psi\right) &=
+  \frac{1}{T} \sum_{t=1}^T \E\left( y^*(s,t) \middle\vert Y, \Psi\right),
+    \label{eqn:EX_LTA}
+  \\
+  \VAR\left( \overline{y^*}(s) \middle\vert Y, \Psi\right) &=
+  \frac{1}{T^2} \sum_{t_1=1}^T \sum_{t_2=1}^T 
+  \COV\left( y^*(s,t_1), y^*(s,t_2) \middle\vert Y, \Psi\right),
+    \label{eqn:VX_LTA}
+  \end{align}
+\end{subequations}
+where $\COV\left( y^*(s,t_1), y^*(s,t_2) \middle\vert Y, \Psi\right)$ is the
+matrix form of \eqref{eqn:VX_REML_Y}.
+
+\subsubsection[log-Gaussian fields]{$\log$-Gaussian fields}
+Transformation of data is commonly used to facilitate the modelling of
+non-Gaussian data under Gaussian assumptions \citep{Tukey57,BoxCox64}.
+The $\log$-transformation has been successfully applied to environmental data,
+including, but not limited to, air-pollution \citep[e.g.\ \PM{10}, \PM{2.5} and
+\no{x}; see][]{Paciorek09,Szpiro10a,Sampson11} and precipitation \citep{Damian03}.
+For $\log$-transformed data exact expressions exist for both bias-corrected
+estimates and their associated mean squared prediction errors (MSPE) 
+\citep{Cressie93, Cressie06, DeOliveira06}. This stands in contrast to the
+approximate $\delta$-method described in Ch.~3.2.2 of \citet{Cressie93} for
+general trans-Gaussian Kriging.
+
+To accomondate $\log$-transformed data both point and temporal average
+predictions for $\log$-Gaussian processes, as described below, are implemented
+in \pkg{SpatioTemporal}. Figure~\ref{fig:predict_example} illustrates the
+difference between predictions of the $\log$-Gaussian process (original data)
+and of the Gaussian process (transformed data).
+
+<<label=figPredictLogExample, eval=FALSE, echo=FALSE>>=
+##prediction interval for additional time-points
+plot(pred.log.2, pred.type="EX.pred", ID="60590007", 
+     main="",  xlab="", ylab="NOx (pbb)", 
+     xlim=as.Date(c("2006-07-01","2007-01-01")),
+     ylim=c(0,185), pred.var=TRUE, pch=NA, 
+     lty=NA, col=c(1,1,"lightgrey"))
+##prediction interval for original timepoints
+plot(pred.log, pred.type="EX.pred", ID="60590007", pred.var=TRUE, add=TRUE,
+     lty=NA, pch=NA, col=c(1,1,"darkgrey"))
+##confidence interval for original timepoints
+plot(pred.log, ID="60590007", add=TRUE, 
+     lty=NA, pch=NA, col=c(1,1,"white"))
+##predictions for additional time-points, due to mean component
+plot(pred.log.2, ID="60590007", add=TRUE, pred.type = "EX.mu", 
+     lty=c(4,NA), lwd=2, pch=NA, col=c(1,NA,NA))
+##predictions for additional time-points
+plot(pred.log.2, ID="60590007", add=TRUE, pred.type = "EX.pred", 
+     lty=c(1,NA), pch=NA, col=c("orange",NA,NA), lwd=3, pred.var=TRUE)
+plot(pred.log.2, ID="60590007", add=TRUE, pred.type = "EX", 
+     lty=c(1,NA), pch=NA, col=c(1,NA,NA), lwd=2)
+##predictions for additional time-points, due to beta-field
+plot(pred.log.2, ID="60590007", add=TRUE, pred.type = "EX.mu.beta", 
+     lty=c(2,NA), lwd=2, pch=NA, col=c("green",NA,NA))
+##observations and predictions at original time-scale
+plot(pred.log, ID="60590007", STmodel=mesa.data.2, add=TRUE, 
+     pred.type = "EX", lty=NA, pch=c(3,4), col=c(1,2,NA))
+legend("topleft", c("Observations", 
+                    "Predictions",
+                    "Predictions, incl. nugget",
+                    "Contribution from beta",
+                    "Contribution from mean",
+                    "95% CI"), bty="n",
+       lty=c(NA,1,1,2,4,NA), lwd=c(NA,2,2,2,2,NA),
+       pch=c(4,3,NA,NA,NA,15), pt.cex=c(1,1,NA,NA,NA,2.5),
+       col=c("red", 1, "orange", "green", 1, "grey"))
+@
+%$
+\begin{figure}[!thb]
+\centering
+<<fig=TRUE, echo=FALSE, height=5>>=
+par(mfcol=c(2,1), mar=c(.5,3.3,2,1), mgp=c(2,1,0))
+<<figPredictExample>>
+par(mar=c(2.3,3.3,0,1))
+<<figPredictLogExample>>
+@
+\caption{Example of predictions on the Gaussian (top) and on the original scale
+  (bottom) at an AQS site (60590007) given data at all other locations.
+  The black line gives the predictions ($\E\left(Y^*_u \middle\vert Y \right)$
+  or $\Zhat{u}$); the orange line is $\widehat{Z_u}$, i.e.\ predictions incl.\
+  the nugget (lower pane only); the dashed green line gives the contribution
+  from the $\beta$-fields, $\M\widehat{\mv{\gamma}} + F \E\left(B_u
+      \middle\vert Y \right)$; and the dotted line is the contribution
+  from the mean, $\M\widehat{\mv{\gamma}} + FX\widehat{\mv{\alpha}}$. For the
+  lower pane, the last two are simply transformed as $\exp\left[ \cdot \right]$
+  without bias correction.
+  Observations occur every 14-days (red $\times$), predictions at these
+  time-points (black $+$) are close to the observations while observations at
+  un-observed time-points co-incide with (top), or are close to (bottom), the
+  dashed green line. Three different $95\%$ intervals are given: a confidence
+  interval for observed time-points (white), prediction interval for observed
+  time-points (dark grey), and prediction interval for the additional
+  un-observed time-points (light grey).}
+\label{fig:predict_example}
+\end{figure}
+
+If $y(s,t)$ is a Gaussian random process \eqref{eqn:distr_Y} then the
+corresponding $\log$-Gaussian random process (i.e.\ the original, untransformed,
+data) is given by $z(s,t) = \exp\left( y(s,t) \right)$ with expectation
+\begin{align*}
+  \mu_z(s,t) &= \E\left( z(s,t) \right) = 
+  \exp\left( \E\left( y(s,t) \right) +  \frac{\VAR\left( y(s,t) \right)}{2} \right).
+\end{align*}
+
+Assuming that both covariance ($\Psi$) and regression ($\mv{\alpha},
+\mv{\gamma}$) parameters are known the best unbiased predictor of an unobserved
+part of the $\log$-Gaussian field is \citep[Ch.~3.2.2]{Cressie93}
+\begin{align}
+  \Zhat{u} &= \exp\left( \E\left( Y^*_u \middle\vert Y, \Psi \right)
+    + \frac{\VAR\left( Y^*_u \middle\vert Y, \Psi, \mv{\alpha}, 
+        \mv{\gamma} \right)}{2} \right).
+  \label{eqn:EZ}
+\end{align}
+Here we are, just as in \eqref{eqn:EX}, interested in the underlying smooth
+field excluding the nugget \citep[see Appendix A in][]{Cressie06}; to obtain a
+predictor, $\widehat{Z_u}$, that includes the nugget, the variance from
+\eqref{eqn:VX} is replaced by the variance from \eqref{eqn:VX_pred} in
+\eqref{eqn:EZ}. The MSPE of $\Zhat{u}$ is,
+\begin{equation}
+  \begin{split}
+  \MSPE\left( \Zhat{u} \right) &= \mu_z(s_u,t_u)^2 \left( 
+    \exp\left( \widetilde{\Sigma}^*_{uu} \right) -
+    \exp\left( \widetilde{\Sigma}^*_{uo} \widetilde{\Sigma}^{-1}
+      \widetilde{\Sigma}^*_{ou} \right)
+    \right)
+    \\ &\approx \Zhat{u}^2 
+    \exp\left( \widetilde{\Sigma}^*_{uu} \right)
+    \biggl[ 1 -
+    \exp\Bigl( -\VAR\left( Y^*_u \middle\vert Y, \Psi, \mv{\alpha}, 
+        \mv{\gamma} \right) \Bigr)
+    \biggr],
+  \end{split}
+  \label{eqn:MSPE}
+\end{equation}
+where the approximation follows since $\Zhat{u}$ is an unbiased estimator of
+$\mu_z(s,t)$. Prediction and confidence intervals for $z(s,t)$ are obtained by
+transformation of the corresponding intervals obtained for $y(s,t)$.
+
+The distinction between predictions with and without nugget is much more
+important for the $\log$-Gaussian case \eqref{eqn:EZ} than for the Gaussian
+case \eqref{eqn:EX}. In general $\Zhat{u} \neq \widehat{Z_u}$, since
+$$
+\VAR\left( Y^*_u \middle\vert Y, \Psi, \mv{\alpha}, \mv{\gamma}\right) \neq 
+\VAR\left( Y_u \middle\vert Y, \Psi, \mv{\alpha}, \mv{\gamma}\right),\ 
+\text{whereas}\ 
+\E\left( Y^*_u \middle\vert Y, \Psi \right) \neq \E\left( Y_u \middle\vert Y,
+  \Psi \right)
+$$
+only at observed locations. The difference between
+$\Zhat{u}$ and $\widehat{Z_u}$ is important when comparing predictions to
+left-out observations in cross-validation.
+
+For the case with unknown regression parameters two possible predictors exist,
+either the unbiased predictor $\Zhathat{ub}{u}$ \citep{DeOliveira06,Cressie06}
+or the biased, minimum mean squared error predictor $\Zhathat{me}{u}$
+\citep{DeOliveira06},
+\begin{subequations}
+  \label{eqn:EZ_REML}
+  \begin{align}
+    \Zhathat{ub}{u} &= \exp\left( \E\left( Y^*_u \middle\vert Y, \Psi \right)
+      + \frac{\VAR\left( Y^*_u \middle\vert Y, \Psi \right)}{2}
+      - \Lambda_z \right),
+    \label{eqn:EZ_REML_UB}
+    \\
+    \Zhathat{me}{u} &= \exp\left( \E\left( Y^*_u \middle\vert Y, \Psi \right)
+      + \frac{\VAR\left( Y^*_u \middle\vert Y, \Psi \right)}{2} 
+      - 2 \Lambda_z \right).
+    \label{eqn:EZ_REML_ME}
+  \end{align}
+\end{subequations}
+Here $\Lambda_z$ is the Lagrange multiplier for the Kriging predictor in
+\eqref{eqn:EX},
+\begin{align}
+  \Lambda_z = \left(\widetilde{X}_u -  \widetilde{\Sigma}^*_{uo}
+      \widetilde{\Sigma}^{-1} \widetilde{X} \right)
+    \left( \widetilde{X}^\trsp \widetilde{\Sigma}^{-1} \widetilde{X}\right)^{-1}
+    \widetilde{X}_u^\trsp.
+    \label{eqn:Lambda}
+\end{align}
+The MSPE of the predictors in \eqref{eqn:EZ_REML} are
+\begin{subequations}
+  \label{eqn:MSPE_REML}
+  \begin{align}
+    \MSPE\left( \Zhathat{ub}{u} \right) &\approx \left( \Zhathat{ub}{u} \right)^2
+    \exp\left( \widetilde{\Sigma}^*_{uu} \right)
+    \biggl[ 1 - \exp\Bigl( -\VAR\left( Y^*_u \middle\vert Y, \Psi\right) \Bigr)
+    \Bigl( 2 e^{\Lambda_z} - e^{2 \Lambda_z} \Bigr) \biggr],
+    \label{eqn:MSPE_REML_UB}
+    \\  
+    \MSPE\left( \Zhathat{me}{u} \right) &\approx \left( \Zhathat{ub}{u} \right)^2
+    \exp\left( \widetilde{\Sigma}^*_{uu} \right)
+    \biggl[ 1 - \exp\Bigl( -\VAR\left( Y^*_u \middle\vert Y, \Psi \right) \Bigr)
+    \biggr],
+    \label{eqn:MSPE_REML_ME}
+  \end{align}
+\end{subequations}
+where we have used that $\Zhathat{ub}{u}$ is an unbiased estimator of
+$\mu_z(s,t)$. We note that
+$$
+\MSPE\left( \Zhathat{me}{u} \right) \leq \MSPE\left( \Zhathat{ub}{u} \right)
+$$
+in accordance with \citet{DeOliveira06}
+
+Following the discussion of block prediction for log-Gaussian processes in
+\citet{DeOliveira06} and \citet{Cressie06}, estimates of temporal averages are
+computed as 
+\begin{align}
+  \zhatLTA =& \frac{1}{T} \sum_{t=1}^T \zhat{u}(s,t),
+  \label{eqn:log_LTA}
+\end{align}
+and similarly for $\zhathatLTA{ub}$ and $\zhathatLTA{me}$. The MSPE for these
+predictors are
+\begin{subequations}
+  \label{eqn:log_LTA_MSPE}
+  \begin{align}
+    \begin{split}
+      \MSPE\left( \zhatLTA \right) \approx& \frac{1}{T^2} \sum_{t_1=1}^T \sum_{t_2=1}^T
+      \zhat{}(s,t_1) \zhat{}(s,t_2) 
+      \\ &
+      \left[ 
+    \exp\left( \begin{bmatrix} \widetilde{\Sigma}^*_{uu} 
+    \end{bmatrix}_{st_1,st_2} \right) -
+    \exp\left( \begin{bmatrix} \widetilde{\Sigma}^*_{uo} \widetilde{\Sigma}^{-1}
+      \widetilde{\Sigma}^*_{ou} \end{bmatrix}_{st_1,st_2} \right)
+    \right]
+    \end{split}
+    \label{eqn:MSPE_LTA}
+    \\
+    \begin{split}
+      \MSPE\left( \zhathatLTA{ub} \right) \approx& \frac{1}{T^2} \sum_{t_1=1}^T \sum_{t_2=1}^T
+      \zhathat{ub}{}\!\!\!\!(s,t_1) \zhathat{ub}{}\!\!\!\!(s,t_2)
+      \exp\left( \begin{bmatrix} \widetilde{\Sigma}^*_{uu} 
+      \end{bmatrix}_{st_1,st_2} \right)
+      \\ &
+      \biggl[ 1 - \exp\Bigl( 
+        -\COV\left( y^*(s,t_1), y^*(s,t_2) \middle\vert Y, \Psi\right)  
+        \Bigr)
+        \\ & \phantom{\biggl[}
+          \Bigl( 
+          e^{ \begin{bmatrix} \Lambda_z \end{bmatrix}_{st_1,st_2}}
+          + e^{ \begin{bmatrix} \Lambda_z^\trsp \end{bmatrix}_{st_1,st_2}}
+          - e^{ \begin{bmatrix} \Lambda_z \end{bmatrix}_{st_1,st_2} +
+            \begin{bmatrix} \Lambda_z^\trsp \end{bmatrix}_{st_1,st_2} }
+          \Bigr) \biggr]
+    \end{split}
+    \label{eqn:MSPE_LTA_ub}
+    \\
+    \begin{split}
+      \MSPE\left( \zhathatLTA{me} \right) \approx& \frac{1}{T^2} \sum_{t_1=1}^T \sum_{t_2=1}^T
+      \zhathat{ub}{}\!\!\!\!(s,t_1) \zhathat{ub}{}\!\!\!\!(s,t_2)
+      \exp\left( \begin{bmatrix} \widetilde{\Sigma}^*_{uu} 
+      \end{bmatrix}_{st_1,st_2} \right)
+      \\ &
+      \biggl[ 1 - \exp\Bigl( 
+        -\COV\left( y^*(s,t_1), y^*(s,t_2) \middle\vert Y, \Psi\right)  
+        \Bigr) \biggr]
+    \end{split}
+    \label{eqn:MSPE_LTA_ms}
+  \end{align}
+\end{subequations}
+Here $\begin{bmatrix} \bullet \end{bmatrix}_{st_1,st_2}$ denotes elements in the
+$\bullet$-matrix; to make $\Lambda_z$ a $T \times T$-matrix $\widetilde{X}_u$
+and $\widetilde{\Sigma}^*_{uo}$ in \eqref{eqn:Lambda} should now contain
+covariates for all times over which we are averaging.
+
+\subsection{Cross-Validation} \label{sec:CV}
+The model's predictive accuracy can be assessed through cross-validation.
+In \citet{Lindstrom13} a cross-validation setup is presented; the setup,
+implemented in this package, handles the highly unbalanced sampling design
+and the MESA Air study's interest in predicting long term average exposures.
+
+Dividing the observed locations into groups, $n$-fold cross-validation, consisting
+of parameter estimation and predictions, is performed as usual
+\citep[Ch.~7.10]{HastieTibshiraniFriedman01}. Given the predictions and
+prediction variances, coverage of 95\% prediction intervals, root mean squared
+error ($\text{RMSE}$) and cross-validated $R^2$'s,
+\begin{equation}
+R^2 = \max\biggl(0, 1 - \frac{\text{RMSE}^2}{\VAR(y(s,t))}\biggr),
+\label{eqn:R2}
+\end{equation}
+can be computed.
+
+When assessing predictions of temporal averages at each location, the possibility of
+missing observations and the resulting missmatch between averages over available
+observations and averages over all predictions must be considered. To account
+for this, the averages in \eqref{eqn:LTA} are adjusted to include only observed
+time-points
+\begin{equation}
+\overline{y}(s) = \sum_{t \in \{\tau\,:\,\exists y(s,\tau)\} } \frac{ y(s,t) }
+{\norm{ \{\tau\,:\,\exists y(s,\tau)\} }}.
+\label{eqn:LTA_obs_only}
+\end{equation}
+
+For locations with only a few observations a large part of the $R^2$ may be
+attributable to the temporal variability. In \citet{Lindstrom13} the temporal
+and spatial effects were separated by  replacing $\VAR(y(s,t))$ in
+\eqref{eqn:R2} with the MSE of a reference model. Suggested reference models
+were: 
+1) the spatial average at each time-point based on observations from all
+locations with good temporal coverage; 
+2) the observation from the closest available location with good temporal
+coverage; 
+3) smooth temporal trends fitted to data from the closest location with good
+temporal coverage.
+The resulting $R^2$'s represent the improvement in predictions
+provided by this model, compared to central location or nearest 
+neighbour schemes commonly used in epidemiology studies 
+\citep{Pope95, Miller07}.
+
+
+\section{Package Features} \label{sec:features}
+The \proglang{R}-package \pkg{SpatioTemporal} includes functions for
+estimation (\code{estimate.STmodel} and \code{MCMC.STmodel}),
+prediction (\code{predict.STmodel}), 
+cross-validation (\code{estimateCV.STmodel} and \code{predictCV.STmodel}),
+and simulation (\code{simulate.STmodel}) 
+of the model described in Section~\ref{sec:theory}. 
+In addition to these functions the package also contains functions for
+construction (\code{createSTdata} and \code{createSTmodel}) of objects
+encapsulating model definition and data; plotting and evaluation of both data
+and results; and functions (see Section~\ref{sec:Ex_trends}) that compute and
+evaluate the smooth temporal basis functions described in 
+Section~\ref{sec:temporal_basis}.
+
+To reduce computational times matrix identities, such as
+\eqref{eqn:sigma_nu_woodbury}, have been used when appropriate and functions
+from the \pkg{Matrix}-package \citep{RpkgMatrix} as well as some custom
+\proglang{C}-functions have been utilized for sparse and block matrix computations.
+
+\subsection{Key Assumptions}
+By construction, the model contains several key assumptions, including:
+1) All temporal structure is captured by the smooth temporal basis functions,
+2) Spatial dependencies (in the coefficients of the temporal functions) can be
+described using stationary universal Kriging
+3) The residual $\nu(s,t)$-field is homoscedastic and independent in time; this
+will often require roughly equidistant temporal sampling, with occasional
+missing time points included for prediction but treated as unobserved.
+4) When computing temporal averages the addition of many unobserved times-points
+will result in an average that tends to
+$$
+\overline{y}(s) = \frac{1}{T} \sum_{i=1}^{m} \beta_i(s) \int_0^T f_i(t) \md t,
+$$
+eliminating any contribution from the $\nu(s,t)$-field; this is an effect of the
+assumption of temporal independence in the $\nu(s,t)$-field.
+
+
+\section[Example: Analysis of Los Angeles NOx Data]{Example: Analysis of Los
+  Angeles \no{x} Data} \label{sec:example}
+An example analysis of a small \no{x} data set from Los Angeles is used to
+illustrate features of the \pkg{SpatioTemporal}-package. The data, which
+is included as an example in the pacakge, is a subset of data available to the
+MESA Air study; a detailed description of the full dataset can be found in
+\citet{Cohen09}.
+
+Following a short description of the data (Section~\ref{sec:data}), we illustrate
+how to:
+\ref{sec:Ex_initial}) collect data into the \code{S3}-structure used by the package,
+\ref{sec:Ex_trends}) construct and evaluate the smooth temporal basis functions,
+\ref{sec:Ex_model}) specify the covariates and covariances structures of the
+model in \eqref{eqn:beta_fields} and \eqref{eqn:nu_fields},
+\ref{sec:Ex_estimation}) estimate parameters and do predictions,
+and
+\ref{sec:Ex_CV}) evaluate the model using cross-validation.
+
+
+\subsection{Data} \label{sec:data}
+
+\subsubsection[NOx Observations]{\no{x} Observations}
+The data used in this example consists of {\em log-transformed} 2-week average
+\no{x} concentrations (ppb) in Los Angelse; observed at 20 locations from the
+national AQS (Air Quality System) network of regulatory monitors as well as
+at 5 locations from the supplementary MESA Air monitoring.
+
+The national AQS network of regulatory monitors consists of a modest number of
+fixed sites that measure ambient concentrations of several different air
+pollutants including \no{x}. The MESA Air supplementary monitoring consists of
+three sub-campaigns, \citep[see][for details]{Cohen09}: ``fixed sites'', ``home
+outdoor'', and ``community snapshot''. Only data from the ``fixed sites'' have
+been included in this tutorial; this campaign consisted of five fixed site
+monitors that provided 2-week averages during the entire MESA Air monitoring
+period. To allow for comparison of the different monitoring protocols, one of
+the MESA Air fixed sites in coastal Los Angeles was colocated with an existing
+AQS monitor.
+
+\subsubsection{Covariates}
+To model the \no{x} data, and to predict at unobserved locations, a number of
+geographic and spatio-temporal covariates will be utilized. Geographic
+covariates used in this example are: 
+1) distance to major roads, i.e.\ census feature class code A1--A3
+ (distances truncated to be $\geq\! 10$m and log-transformed);
+2) distance to the closest road, i.e.\ the minimum of distances in 1) above;
+3) distance to coast (truncated to be $\leq\! 15$km); and
+4) average population density in a 2 km buffer.
+Here census feature class code A1 roads refer to interstates and other limited
+access highways; A2 are primary roads without limited access; and A3 are
+secondary roads, e.g.\ state highways \citep[see pp.\ 3--27 in][]{USCensusBureau02}.
+For details on the variable selection process that lead to these covariates as
+well as a more complete list of the covariates available to MESA Air the reader
+is referred to \citet{Mercer11}.
+
+In addition to the geographic covariates a spatio-temporal covariate in the form
+of output from a deterministic air pollution model is also available.
+The spatio-temporal covariate is the output from a slightly modified version of
+Caline3QHC \citep{EPAcaline92,Wilton10,MESAcaline10}. Caline is a line
+dispersion model for air pollution. Given locations of major (road) sources and
+local meteorology Caline uses a Gaussian model dispersion to predict how
+nonreactive pollutants travel with the wind away from sources; providing hourly
+estimates of air pollution at distinct points. The hourly contributions from
+Caline have been averaged to produce a 2-week average spatio-temporal
+covariate. The Caline predictions in this tutorial only
+includes air pollution due to traffic on major roads (A1, A2, and large A3).
+
+\subsection[Creating an STdata-Object]{Creating an \code{STdata}-Object} 
+\label{sec:Ex_initial}
+To get started we load the package, along with a few additional packages and the
+data used in this example:
+<<>>=
+library(SpatioTemporal)
+library(Matrix)
+library(plotrix) 
+library(maps)
+data(mesa.data.raw, package="SpatioTemporal")
+@ 
+Here the raw data contains observations along with geographic and spatio-temporal
+covariates. 
+
+The first step is to create an \code{STdata} \code{S3}-object from
+the raw data. This object collects observations, covariates and temporal trends
+and is used as input to several of the functions in \pkg{SpatioTemporal}.
+<<>>=
+mesa.data <- createSTdata(obs=mesa.data.raw$obs, covars=mesa.data.raw$X, 
+   SpatioTemporal=list(lax.conc.1500=mesa.data.raw$lax.conc.1500))
+@ 
+Here the observations, \code{mesa.data.raw\$obs}, can be given either as a (number
+of time-points) -- by -- (number of locations) matrix, where the location and
+time of each observation is given by row- and columnames of the matrix and missing
+observations are denote by \code{NA}; or as a \code{data.frame} with fields
+\code{date}, \code{ID} and \code{obs}. 
+
+Geographic covariates and locations of the observation are given as a
+\code{data.frame}, \code{mesa.data.raw\$X}, and matched to the 
+observations through either 1) a field named \code{ID}, or 2) the rownames of
+the \code{data.frame}. All observations {\em must be associated} with a row in 
+\code{mesa.data.raw\$X}; additional rows giving covariates for
+unobserved locations at which we want predictions may be included in
+\code{mesa.data.raw\$X}.
+If a field \code{type} exists in \code{mesa.data.raw\$X}
+it is used to denote which type of monitoring system each location belongs to. In
+this example:
+<<>>=
+table(mesa.data.raw$X$type)
+@ 
+The spatio-temporal covariates can be given either as a
+\code{list} of matrices or as a 3D-\code{array}. The row- and column names
+should provide the dates and locations of the spatio-temporal covariates.
+
+The \code{STdata} object has \code{print}, \code{summary}, \code{plot},
+\code{qqnorm} and \code{scatterPlot} methods that can be used for exploratory
+analysis of the data. For example \code{print(mesa.data)} provides an overview of
+observations and covariates while the plot functions can be used to illustrate
+which space-time locations that have been observed, investigate the Gaussianity
+of our data, or study the dependence between observations and covariates, see
+Figure~\ref{fig:plotSTdata}.
+<<label=figPlotSTdata, eval=FALSE>>=
+layout(matrix(c(1,2,1,3), 2, 2))
+par(mar=c(2.3,3.3,2,1), mgp=c(2,1,0))
+plot(mesa.data, "loc", main="Occurrence of Observations", xlab="", 
+     ylab="Location", col=c("black", "red"), legend.loc=NULL)
+par(mar=c(3.3,3.3,2,1))
+qqnorm(mesa.data, line=1)
+scatterPlot(mesa.data, covar="km.to.coast", xlab="Distance to coast",
+            ylab="NOx (log ppb)", pch=19, cex=.25,
+            smooth.args=list(span=4/5,degree=2))
+@ 
+
+\begin{figure}[!thb]
+\centering
+<<fig=TRUE, echo=FALSE, height=4>>=
+<<figPlotSTdata>>
+@
+\caption{Counterclockwise from the top: Space-time locations of our
+  observations divided into AQS (black) and MESA fixed (red) locations,
+  \code{qqnorm}-plot for all observations, and dependence between observations
+  and distance to coast.}
+\label{fig:plotSTdata}
+\end{figure}
+
+\subsection{Temporal Basis Functions} \label{sec:Ex_trends}
+Having collected the data, we are now ready to evaluate the
+temporal structure and specify temporal basis functions. The algorithms
+described in Section~\ref{sec:temporal_basis} are implemented in \code{SVDmiss},
+\code{SVDsmooth}, and \code{SVDsmoothCV}; \code{calcSmoothTrends} and
+\code{updateTrend} provide tools for altering the smooth temporal basis
+functions of \code{STdata}- and \code{STmodel}-objects.
+
+To estimate the smooth temporal functions we first need to construct a
+data-matrix \eqref{eqn:data_matrix}
+<<>>=
+D <- createDataMatrix(mesa.data)
+@
+For highly unbalanced measurement designs a \code{subset} option exists. This
+can be used to restrict the data matrix to only contain observations from
+some locations.
+
+\subsubsection{Determining the Number of Basis Functions}
+Here the temporal functions will be based on all available data. To determine a
+suitable number of basis functions the cross-validation described in
+Section~\ref{sec:temporal_basis} is run, evaluting $0$ to $4$ smooth basis
+functions (i.e.\ $m=1,\ldots,5$, since $f_1(t)\equiv 1$).
+<<echo=FALSE>>=
+SVD.cv <- SVDsmoothCV(D, 0:4)
+@
+<<eval=FALSE>>=
+SVD.cv <- SVDsmoothCV(D, 0:4)
+@
+The output of \code{SVDsmoothCV} consists of the cross-validated MSE, $R^2$,
+AIC, and BIC computed for each column using \code{summary.lm} and
+\code{extractAIC}. Averaging over all columns/cross-validation groups we have
+<<>>=
+print(SVD.cv)
+@
+with a graphical summary obtained from (see Figure~\ref{fig:svdCV})
+<<label=figSVDcv, eval=FALSE>>=
+plot(SVD.cv)
+@
+As would be expected in any regression scenario, increasing the number of basis
+functions increases $R^2$ and decreases the MSE. All four statistics flatten
+out noticable after 2 basis functions, indicating that 2 basis functions
+is likely to provide the most efficient description of the temporal
+variability. The lack of auto-correlation when fitting the temporal basis to
+data at each location (Figure~\ref{fig:smooth_trends}) shows that 2 basis
+functions are sufficient to capture the temporal structure.
+
+\begin{figure}[!thb]
+\centering
+<<fig=TRUE, echo=FALSE, height=4>>=
+par(mgp=c(2,1,0))
+<<figSVDcv>>
+@
+\caption{Cross-validation results for different numbers of smooth temporal trends}
+\label{fig:svdCV}
+\end{figure}
+
+We now use the \code{updateTrend} function to add the smooth temporal basis functions
+to the \code{STdata}-object
+<<>>=
+mesa.data <- updateTrend(mesa.data, n.basis=2)
+@
+Alternatively \code{calcSmoothTrends} can be used to compute both the basis
+functions based on all data and those obtained when excluding each column in the
+data-matrix
+<<echo=FALSE>>=
+smooth.trend <- calcSmoothTrends(mesa.data, n.basis=2, cv=TRUE)
+@
+<<eval=FALSE>>=
+smooth.trend <- calcSmoothTrends(mesa.data, n.basis=2, cv=TRUE)
+@
+This allows for a sensitivity analysis of the temporal basis functions. Here we
+illustrate this by the fit at one location
+(Figure~\ref{fig:smooth_trends_CV}), but the different temporal basis functions
+could be carried through the entire analysis.
+<<label=figsmooth_trends_CV, eval=FALSE>>=
+mesa.data.cv <- vector("list",  length(smooth.trend$trend.fnc.cv))
+for(i in 1:length(mesa.data.cv)){
+  suppressMessages(mesa.data.cv[[i]] <- updateTrend(mesa.data, 
+                   fnc=smooth.trend$trend.fnc.cv[[i]]))
+}
+plot(mesa.data, main="Possible temporal trends",
+     xlab="", ylab="NOx (log ppb)", pch=c(19,NA), cex=.25)
+for(i in 1:length(mesa.data.cv)){
+  plot(mesa.data.cv[[i]], add=TRUE, col=i, pch=NA, lty=c(NA,2))
+}
+@
+
+\begin{figure}[!thb]
+\centering
+<<fig=TRUE, echo=FALSE, height=2.5>>=
+par(mar=c(2.1,3.3,2,1), mgp=c(2,1,0))
+<<figsmooth_trends_CV>>
+@
+\caption{Cross-validated temporal basis functions. The solid line is the
+  regression fit of 2 basis functions, based on all data, to observations at
+  AQS site \Sexpr{mesa.data$covars$ID[1]}, the dashed lines are the
+  corresponding fits of basis functions obtained when excluding one column at a
+  time from the data-matrix.}
+\label{fig:smooth_trends_CV}
+\end{figure}
+
+\subsubsection{Evaluating the Basis Functions}
+The \code{plot.STdata} function can now be used to evaluate how well the
+temporal basis functions capture the temporal structure, see
+Figure~\ref{fig:smooth_trends}. \code{plot.STdata} fits a linear regression of
+observations for a particular location of the smooth basis functions, and plots
+fitted values, residuals, auto-correlation, or partial auto-correlation functions.
+Here the two temporal basis functions capture the temporal variability in the data,
+as illustrated by residuals and correlation functions.
+<<label=figsmooth_trends, eval=FALSE>>=
+par(mar=c(3.3,3.3,1.5,1), mgp=c(2,1,0))
+layout(matrix(c(1,1,2,2,3,4), 3, 2, byrow=TRUE))
+plot(mesa.data, "obs", ID="60370113", 
+     xlab="", ylab="NOx (log ppb)",
+     main="Temporal trend 60370113")
+plot(mesa.data, "res", ID="60370113", 
+     xlab="", ylab="NOx (log ppb)")
+plot(mesa.data, "acf", ID="60370113")
+plot(mesa.data, "pacf", ID="60370113")
+@
+
+\begin{figure}[!thb]
+\centering
+<<fig=TRUE, echo=FALSE, height=5>>=
+<<figsmooth_trends>>
+@
+\caption{The smooth temporal trends fitted to data at site
+  \Sexpr{mesa.data$covars$ID[5]}. Fitted trends, residuals, auto-correlation, and
+  partial auto-correlation functions are shown.}
+\label{fig:smooth_trends}
+\end{figure}
+
+\subsubsection{Deterministic Basis Functions}
+In lieu of the SVD based basis functions we could use a set of deterministic
+temporal functions, e.g.\ $f_1(t)=1$, $f_2(t)=2\pi t/365$,
+$f_3(t)=\sin(2\pi t/365)$, and $f_4(t)=\cos(2\pi t/365)$. Specifying
+these and comparing to the data driven smooths extrated above (see
+Figure~\ref{fig:deterministic_trends}) we note that, for this data, three
+deterministic basis functions achieve a slightly worse fit than the two
+functions based on smoothed SVDs.
+<<label=figDeterministicTrends, eval=FALSE>>=
+mesa.data.fnc <- updateTrend(mesa.data, fnc=function(x){
+  x = 2*pi*as.numeric(x)/365; 
+  return( cbind(x, sin(x), cos(x)) )})
+par(mfrow=c(2,1), mar=c(2.3,3.3,1.5,1), mgp=c(2,1,0))
+for(i in c("60370016","60371103")){
+  plot(mesa.data, ID=i, pch=c(19,NA), cex=.25, xlab="",
+       ylab="NOx (log ppb)", main=paste("AQS site",i))
+  plot(mesa.data.fnc, ID=i, add=TRUE, col=2, pch=NA)
+}
+@ 
+
+\begin{figure}[!thb]
+\centering
+<<fig=TRUE, echo=FALSE, height=3>>=
+<<figDeterministicTrends>>
+@
+\caption{Comparing the fit of 2 smooth (black) and 3 deterministic (red) basis
+  functions at two locations.}
+\label{fig:deterministic_trends}
+\end{figure}
+
+
+\subsection{Specifying the Model} \label{sec:Ex_model}
+Having constructed a \code{STdata}-object with suitable temporal basis functions
+we are now ready to create a \code{STmodel}-object that can be used by the
+estimation and prediction functions of \pkg{SpatioTemporal}. 
+A \code{STmodel}-object is created through \code{createSTmodel}, by adding
+covariance and covariate specifications for the $\beta$- and $\nu$-fields to a
+\code{STdata}-object.
+
+
+Suitable covariates and covariance structures for the $\beta$-fields in
+\eqref{eqn:beta_fields} can be determined by considering the empirical estimates
+of these fields obtained by regressing the observations at each location
+on the temporal basis functions. The resulting regression coefficients can be
+analysed using standard geo-statistical software, e.g.\ provided by the
+\proglang{R}-packages \pkg{geoR} \citep{RpkgGeoR} or \pkg{fields}
+\citep{RpkgFields}, to determine suitable mean and covariance models \citep[see
+also][]{Mercer11}.
+
+Here we briefly illustrate the point by computing the regression coefficents and
+comparing them to a few possible covariates (Figure~\ref{fig:naive_beta}). 
+<<label=figBetaLm, eval=FALSE>>=
+beta.lm <- estimateBetaFields(mesa.data)
+par(mfrow=c(1,2), mar=c(3.3,2.3,1.5,1), mgp=c(2,1,0))
+plotCI(mesa.data$covars$log10.m.to.a1, beta.lm$beta[,1], 
+       uiw=1.96*beta.lm$beta.sd[,1], ylab="", xlab="Distance to A1-road",
+       main="Beta-field for f1(t)")
+plotCI(mesa.data$covars$km.to.coast, beta.lm$beta[,2], 
+       uiw=1.96*beta.lm$beta.sd[,2], ylab="", xlab="Distance to coast",
+       main="Beta-field for f2(t)")
+@ 
+To simplify the analysis of unbalanced measurement designs \code{estimateBetaFields}
+provides a \code{subset} option that restricts the evaluated locations.
+\begin{figure}[!thb]
+\centering
+<<fig=TRUE, echo=FALSE, height=3>>=
+<<figBetaLm>>
+@
+\caption{Regression estimates of $\beta_1(s)$ and $\beta_2(s)$ at each location,
+  with $95\%$ confidence intervals, as a function of the distance to A1 roads or
+  the distance to coast.} 
+\label{fig:naive_beta}
+\end{figure}
+
+Partially based on Figure~\ref{fig:naive_beta} we specify different mean models
+for the three $\beta$-fields, but use an exponential covariance function without
+nugget for all fields; it is possible to specify different covariance functions for
+each $\beta$-field. Possible covariance functions are describe by the functions
+\code{namesCovFuns} and \code{parsCovFuns}, while \code{updateCovf} can be used
+to alter the covariance structure of an existing \code{STmodel}.
+<<>>=
+LUR <- list(~log10.m.to.a1+s2000.pop.div.10000+km.to.coast,
+            ~km.to.coast, ~km.to.coast)
+cov.beta <- list(covf="exp", nugget=FALSE)
+@ 
+For the $\nu$-field we use an exponential covariance with a nugget that
+can differ between AQS and MESA fixed sites.
+<<>>=
+cov.nu <- list(covf="exp", nugget=~type, random.effect=FALSE)
+@ 
+In this specification the $\log$-nugget will be given by a linear model
+\begin{equation}
+\log \sigma^2_\text{nugget}(s) = \theta_{\nu,\text{const}} +
+  \theta_{\nu,\text{type}} \mathbf{1}(s \in \text{MESA fixed sites}).
+  \label{eqn:nu_nugget}
+\end{equation}
+The \code{random.effect=FALSE} option specifies that
+we do not want a random mean for each $\nu(\cdot,t)$ field. A random effect
+in time provides a way of capturing temporally uncorrelated large scale
+deviations from the smooth temporal basis functions. Using both a regression
+model for $\log$-nugget \eqref{eqn:nu_nugget} and a temporal random effect the
+full spatio-temporal covariance for the $\nu$-field would be
+\begin{equation}
+  r_\nu(s_1,t_1; s_2,t_2) = 
+  \begin{cases}
+    \sigma^2_\text{nugget}(s_1) + g(0) + \tau^2, & \text{if } s_1=s_2,\ t_1=t_2, \\
+    g(s_1-s_2) + \tau^2, & \text{if } s_1 \neq s_2,\ t_1=t_2, \\
+    0, & \text{if } t_1 \neq t_2,
+  \end{cases}
+  \label{eqn:nu_covf}
+\end{equation}
+where $\sigma^2_\text{nugget}(s)$ is a (spatially varying) nugget, $g(s)$ is a
+stationary covariance function, and $\tau^2$ is the variance of a temporal
+random effect.
+
+The final step is to specify coordinates for the observations and create
+the \code{STmodel}-object:
+<<>>=
+locations <- list(coords=c("x","y"), long.lat=c("long","lat"), 
+                  others="type")
+mesa.model <- createSTmodel(mesa.data, LUR=LUR, ST="lax.conc.1500",
+                            cov.beta=cov.beta, cov.nu=cov.nu,
+                            locations=locations)
+@ 
+In \code{locations} the element \code{coords} specifies which components of
+\code{mesa.data\$covars} to use when computing distances between observation
+locations; the elements \code{long.lat} and \code{others} give additional fields
+that are carried over from \code{mesa.data\$covars} to
+\code{mesa.model\$locations}, e.g.\ data that could be useful for plotting.
+All variables referenced in the \code{LUR} and \code{cov.nu\$nugget}
+formulas, and in the \code{locations}-list must be found in
+\code{mesa.data\$covars}.
+
+Most of the \code{S3}-methods available for \code{STdata}-objects also exists
+for \code{STmodel}-objects.
+
+\subsection{Parameter Estimation and Prediciton} \label{sec:Ex_estimation}
+Parameters of the spatio-temporal model \eqref{eqn:distr_Y} can by obtained by
+maximising \eqref{eqn:profile_likelihood} through \code{estimate.STmodel}. Given
+(estimated) parameters predictions are obtained from \code{predict.STmodel}.
+
+\subsubsection{Estimation}
+To avoid potential numerical optimisation issues, the estimation function allows
+for multiple starting points, returning all optima found. The functions
+\code{loglikeSTdim} and \code{loglikeSTnames} gives the number of parameters
+(and other model dimension) and the names, i.e.\ expected order, of the
+parameters. Using this information a two column matrix, where each column
+represents a different optimisation starting point, is constructed
+<<>>=
+dim <- loglikeSTdim(mesa.model)
+x.init <- cbind(c( rep(2, dim$nparam.cov-1), 0),
+                c( rep(c(1,-3), dim$m+1), -3, 0))
+rownames(x.init) <- loglikeSTnames(mesa.model, all=FALSE)
+@ 
+Model parameters are then estimated through
+<<eval=FALSE>>=
+est.mesa.model <- estimate(mesa.model, x.init, type="p", hessian.all=TRUE)
+@ 
+where \code{type} allows us to use either the f(ull), p(rofile)
+\eqref{eqn:profile_likelihood}, or r(eml) \eqref{eqn:REML_likelihood}
+log-likelihoods. Since the estimation takes time ($10$--$15$ minutes, depending
+on the computer) the package contains precomputed results which we load and
+examine.
+<<>>=
+data(est.mesa.model, package="SpatioTemporal")
+print(est.mesa.model)
+@ 
+The estimation results indicate that the optimisation for both starting points
+have converged, starting point 1 being marginally better, with very similar
+parameter estimates and function values.
+
+Plots of the estimated parameters together with approximate $95\%$-confidence
+intervals computed using the Hessian, i.e.\ the observed information matrix
+\citep[Ch.~10]{CasellaBerger02}, can be seen in Figure~\ref{fig:CVparest} below;
+this Figure also includes parameter estimates from the cross-validation.
+Confidence intervals for covariance parameters of the residual $\nu$-field are
+much smaller than the corresponding intervals for the covariance parameters
+characterising the $\beta$-fields. This is due to us having {\em only one
+  replicate} of each $\beta$-field --- in principal given by the regression of
+observations on the smooth temporal basis functions --- but $T=\Sexpr{dim$T}$
+replicates of the residual $\nu$-field, {\em one for each timepoint} --- in
+principal given by the residuals from the regression.
+%$
+
+\subsubsection{Predictions}
+Given estimated parameters, predictions can be computed for the Gaussian model using
+\eqref{eqn:EX}; for log-Gaussian processes using \eqref{eqn:EZ} or
+\eqref{eqn:EZ_REML}; and for the temporal averages using \eqref{eqn:EX_LTA} or
+\eqref{eqn:log_LTA}. 
+<<echo=FALSE>>=
+pred <- predict(mesa.model, est.mesa.model, LTA=TRUE, type="p")
+pred.log <- predict(mesa.model, est.mesa.model, LTA=TRUE,
+                    transform="unbiased", type="p")
+@ 
+<<eval=FALSE>>=
+pred <- predict(mesa.model, est.mesa.model, LTA=TRUE, type="p")
+pred.log <- predict(mesa.model, est.mesa.model, LTA=TRUE,
+                    transform="unbiased", type="p")
+@ 
+Here the \code{type} option controls the computation of variances, with 
+\code{type="p"} (or \code{type="f"}) the regression parameters are assumed known
+resulting in variances/MSPEs according to \eqref{eqn:VX_Y} or \eqref{eqn:MSPE};
+for \code{type="r"} regression parameters are assumed unknown and variances/MSPEs
+are given by \eqref{eqn:VX_REML_Y} or \eqref{eqn:MSPE_REML}.
+Items computed include predictions of $y(s,t)$, contributions to the predictions
+from different parts of the model (see Figure~\ref{fig:predict_example} above),
+prediction variances (or MSPE), and predictions of the $\beta$-fields;
+\code{print.predictSTmodel} can be used to display all computed components.
+
+The latent $\beta$-fields \eqref{eqn:EX_beta} can be compared to the empirical,
+regression based, estimates presented in Figure~\ref{fig:naive_beta}. Comparing
+these two estimates (see Figure~\ref{fig:beta_est}) we see that they are close,
+with the largest discrepancies occuring for $\beta$'s associated with the second
+temporal trend, $f_3(t)$. However, the uncertainty for these $\beta$'s are
+substantial.
+<<label=figBetaEX, eval=FALSE>>=
+par(mfrow=c(2,2), mar=c(3.3,3.3,1.5,1), mgp=c(2,1,0), pty="s")
+for(i in 1:3){
+  plotCI(x=beta.lm$beta[,i], y=pred$beta$EX[,i], 
+         uiw=1.96*beta.lm$beta.sd[,i], err="x", 
+         pch=NA, sfrac=0.005,
+         main=paste("Beta-field for f", i, "(t)", sep=""),
+         xlab="Empirical estimate",
+         ylab="Spatio-Temporal Model")
+  plotCI(x=beta.lm$beta[,i], y=pred$beta$EX[,i], 
+         uiw=1.96*sqrt(pred$beta$VX[,i]),
+         add=TRUE, pch=NA, sfrac=0.005)
+  abline(0, 1, col="grey")
+}
+@ 
+
+\begin{figure}[!thb]
+\centering
+<<fig=TRUE, echo=FALSE, height=6>>=
+<<figBetaEX>>
+@
+\caption{Comparison of the regression based and full \protect{\eqref{eqn:EX_beta}}
+  estimates of the $\beta$--field, including the uncertainties in both estimates.}
+\label{fig:beta_est}
+\end{figure}
+
+The predictions also include the temporal averages at each location. In 
+Figure~\ref{fig:LTA} these predictions are compared to the temporal averages of
+observations at each site. A minor issue (see also Section~\ref{sec:CV}) with this
+comparison is the temporal miss-match between predictions (averaged over
+10-years) and the observations (averaged over 1 to 10 years depending on
+available data).
+<<label=figLTA, eval=FALSE>>=
+par(mfrow=c(1,2), mar=c(3.3,3.3,1.5,1), mgp=c(2,1,0))
+with(pred$LTA, plotCI(colMeans(D, na.rm=TRUE), EX, uiw=1.96*sqrt(VX.pred),
+                      xlim=c(2.9,4.4), ylim=c(2.9,4.4),
+                      ylab="Predictions", xlab="Observations",
+                      main="Average NOx (log ppb)"))
+abline(0, 1, col="grey")
+with(pred.log$LTA, plotCI(colMeans(exp(D), na.rm=TRUE), 
+                          EX, uiw=1.96*sqrt(VX.pred),
+                          xlim=c(25,95), ylim=c(25,95),
+                          ylab="Predictions", xlab="Observations",
+                          main="Average NOx (ppb)"))
+abline(0, 1, col="grey")
+@ 
+
+\begin{figure}[!thb]
+\centering
+<<fig=TRUE, echo=FALSE, height=3>>=
+<<figLTA>>
+@
+\caption{Observed and predicted temporal averages at each location, both for the
+  Gaussian (left) and log-Gaussian (right) processes. The difference between
+  observed and predicted values is (partially) due to temporally incomplete
+  observations, i.e.\ the predicted average is over the \emph{entire} $10$-year
+  period, regardless of when we have observations.}
+\label{fig:LTA}
+\end{figure}
+
+
+\subsection{Cross-validation and Model Evaluation} \label{sec:Ex_CV}
+The model's predictive ability can be evaluated through cross-validataion
+\citep{Lindstrom13}. The first step is to define a vector that splits the
+observations into CV-groups
+<<>>=
+Ind.cv <- createCV(mesa.model, groups=10, min.dist=.1)
+@ 
+For the $i^\text{th}$ CV-group observations for which $\text{Ind.cv} = i$ are
+predicted using parameter estimates and conditional expectations based on
+the observations where $\text{Ind.cv} \neq i$. Since the primary focus when
+constructing the package was spatial prediction the number of locations in each
+group will be roughly even
+<<>>=
+ID.cv <- sapply(split(mesa.model$obs$ID, Ind.cv), unique)
+print( sapply(ID.cv, length) )
+@ 
+although the number of observations in each grup may differ substantially
+<<>>=
+table(Ind.cv)
+@ 
+Having four locations in the $10^\text{th}$ group is due to the fact that
+AQS site \code{60371103} is colocated with MESA Air site \code{L001}.
+<<>>=
+print(mesa.model$D.beta[ID.cv[[10]],ID.cv[[10]]])
+@
+As seen from the distance matrix above, the two stations are only
+$\Sexpr{round(mesa.model$D.beta["60371103","L001"],3)}$ km apart (less than
+\code{min.dist=.1}) causing \code{createCV} to treat them as ``one'' location.
+
+For cases where the primary interest is in temporal predictions suitable
+\code{Ind.cv} vectors could be construted with the help of elements in
+\code{mesa.model$obs}. 
+%$
+
+\subsubsection{Estimation and Prediciton}
+For the estimation part of the cross-validation a set of starting point(s) is
+needed; here we use the optimum found in the optimisation and the starting
+point, of the two possible, which lead to the optimum.
+<<>>=
+x.init <- coef(est.mesa.model, pars="cov")[,c("par","init")]
+@ 
+As before the estimation is computationally expensive
+<<eval=FALSE>>=
+est.cv.mesa <- estimateCV(mesa.model, x.init, Ind.cv)
+@ 
+and we load precomputed results.
+<<>>=
+data(est.cv.mesa, package="SpatioTemporal")
+@ 
+Studying results from \code{print(est.cv.mesa)} (not shown) it can be seen that
+all 10 of the estimations have converged, and comparing these estimates
+(available through \code{coef(est.cv.mesa)}) to those obtained for the entire data
+set shows reasonable agrement, both with regards to values and uncertainties
+(Figure~\ref{fig:CVparest}). 
+<<label=figParEstCV, eval=FALSE>>=
+par(mfrow=c(1,1), mar=c(13.5,2.5,.5,.5), las=2)
+with(coef(est.mesa.model, pars="all"), 
+     plotCI((1:length(par))+.3, par, uiw=1.96*sd, 
+            col=2, xlab="", xaxt="n", ylab=""))
+boxplot(est.cv.mesa, "all", boxwex=.4, col="grey", add=TRUE)
+@
+\begin{figure}[!thb]
+<<fig=TRUE, echo=FALSE, height=6>>=
+<<figParEstCV>>
+@ 
+\caption{Estimated parameters and approximate 95\% confidence intervals (red)
+  compared to parameter estimates from 10-fold cross-validation (box-plots).}
+\label{fig:CVparest}
+\end{figure}
+
+Given parameter estimates the prediction part of the cross-validation can be
+carried out for either Gaussian or log-Gaussian models. In both
+cases temporal averages are computed based on only the observed time-points, as
+in \eqref{eqn:LTA_obs_only}.
+<<eval=TRUE>>=
+##pred.cv.mesa <- predictCV(mesa.model, est.cv.mesa, LTA=TRUE)
+data(pred.cv.mesa, package="SpatioTemporal")
+pred.cv.mesa.log <- predictCV(mesa.model, est.cv.mesa, 
+                         LTA=TRUE, transform="unbiased")
+@ 
+As for \code{estimateCV} the computations take time and precomputed results are
+included in \code{data(CV.mesa.model)} which we loaded previously.
+
+Alternatively the function \code{computeLTA} can be applied to the result from
+\code{predictCV}, however this will only compute the temporal averages
+in \eqref{eqn:LTA_obs_only} and will \emph{not} include the variances from
+\eqref{eqn:VX_LTA} or \eqref{eqn:MSPE_LTA}-\eqref{eqn:MSPE_LTA_ms}.
+
+\subsubsection{Model Evaluation}
+The \code{summary.predCVSTmodel} function computes RMSE, $R^2$, and coverage of
+prediction intervals for the cross-validation. For the log-Gaussian data we have:
+<<>>=
+summary(pred.cv.mesa.log)
+@ 
+The results show reasonable models fits with $R^2$ values of 
+$\Sexpr{round(summary(pred.cv.mesa.log)$R2[1,4],3)}$ and
+$\Sexpr{round(summary(pred.cv.mesa.log)$R2[2,4],3)}$ 
+for observations and temporal averages respectively. It should also be noted
+that although the mean component,
+\begin{equation*}
+\exp\left( \M\widehat{\mv{\gamma}} + FX\widehat{\mv{\alpha}} \right),
+\end{equation*}
+accounts for a substantial part of the $R^2$ 
+($\Sexpr{round(summary(pred.cv.mesa.log)$R2[1,1],2)}$)
+for the observations, it captures very little of the variability in the temporal
+averages
+($R^2 \approx \Sexpr{round(summary(pred.cv.mesa.log)$R2[2,1],2)}$).
+The $\Sexpr{round(summary(pred.cv.mesa.log)$coverage["average",1]*100)}\%$ coverage
+of a $95\%$ confidence interval for the temporal averages might seem a tad low, but
+one should remember that it translates to
+$\Sexpr{summary(pred.cv.mesa.log)$coverage["average",1]*dim$n}$ of $\Sexpr{dim$n}$
+locations. 
+
+To seperate temporal and spatial predictive ability for locations with few
+observations (not an issue here), the reference models described in
+\citet{Lindstrom13} can be computed by \code{predictNaive}, and including these
+in the \code{summary}-call above gives adjusted $R^2$-values. Further
+\code{summary(pred.cv.mesa.log, by.date=TRUE)} provides individual cross-validation
+statistics for each time-point. The result from \code{predCV} contains, in
+\code{pred.cv.mesa.log\$pred.obs}, a \code{data.frame} with observations,
+predictions, variances, etc.\ that can be used to compute additional
+cross-validation statistics. 
+
+To visualise the cross-validation results, several different plots are available
+(Figure~\ref{fig:CVpred}); both for the original (ppb, log-Gaussian) and
+the transformed (log ppb, Gaussian) data. 
+Studying time-series at single locations, both the predictions and $95\%$
+prediction intervals agree well with left-out observations. 
+Plotting all predictions against observations also shows reasonable agreement,
+although some locations exhibit small, but consistent, biases.
+The predicted temporal averages \eqref{eqn:LTA_obs_only} match the
+observations, but with rather large prediction intervals. The width of the
+intervals is caused by several locations only having a few years of
+data to average over. The normalised residuals $(y-\E(y))/\sqrt{\VAR(y)}$ are
+approximately $\Normal{0}{1}$, with no strong seasonal differences, indicating
+that our distributional assumptions are reasonable. Finally plots of residuals
+agains covariates show little unexplained, residual structure.
+
+\clearpage
+
+<<label=figPredCV, eval=FALSE>>=
+par(mar=c(3.3,3.3,1.5,1), mgp=c(2,1,0))
+layout(matrix(c(1,1,2,2,3,4,5,6), 4, 2, byrow=TRUE))
+plot(pred.cv.mesa, ID="60371601", xlab="", ylab="NOx (log ppb)", 
+     main="Predictions for 60371601", lty=c(1,NA), lwd=2, 
+     pch=c(NA,19), cex=.75)
+plot(pred.cv.mesa, ID="60371601", pred.type="EX.mu", 
+     lty=4, lwd=2, col="blue", add=TRUE)
+plot(pred.cv.mesa, ID="60371601", pred.type="EX.mu.beta", 
+     lty=2, lwd=2, col="green", add=TRUE)
+
+plot(pred.cv.mesa.log, ID="60371601", xlab="", ylab="NOx (ppb)", 
+     main="Predictions for 60371601", pred.type="EX.pred", 
+     lty=c(1,NA), lwd=2, pch=c(NA,19), cex=.75)
+plot(pred.cv.mesa.log, ID="60371601", pred.type="EX.mu", 
+     lty=4, lwd=2, col="blue", add=TRUE)
+plot(pred.cv.mesa.log, ID="60371601", pred.type="EX.mu.beta", 
+     lty=2, lwd=2, col="green", add=TRUE)
+legend("topright", c("Observations", "Predictions",
+                     "Contribution from beta",
+                     "Contribution from mean",
+                     "95% CI"), bty="n",
+       lty=c(NA,1,2,4,NA), lwd=c(NA,2,2,2,NA),
+       pch=c(19,NA,NA,NA,15), pt.cex=c(.75,NA,NA,NA,2.5),
+       col=c("red", "black", "green", "blue", "grey"))
+
+plot(pred.cv.mesa, "obs", ID="all", pch=c(19,NA), cex=.25, lty=c(NA,2), 
+     col=c("ID", "black", "grey"), xlab="Observations", 
+     ylab="Predictions", main="Cross-validation NOx (log ppb)")
+
+with(pred.cv.mesa.log$pred.LTA, plotCI(obs, EX.pred, uiw=1.96*sqrt(VX.pred),
+                                  xlab="Observations", ylab="Predictions",
+                                  main="Temporal average NOx (ppb)"))
+abline(0, 1, col="grey")
+
+I.season <- as.factor(as.POSIXlt(pred.cv.mesa$pred.obs$date)$mon+1)
+levels(I.season) <- c(rep("Winter",2), rep("Spring",3), 
+                      rep("Summer",3), rep("Fall",3), "Winter") 
+qqnorm(pred.cv.mesa, norm=TRUE, main="Normalised residuals",
+       col=I.season)
+legend("bottomright", legend=as.character(levels(I.season)),
+       pch=1, col=1:nlevels(I.season), bty="n")
+
+scatterPlot(pred.cv.mesa, STdata=mesa.model, covar="log10.m.to.a1", 
+            group=I.season, col=c(2:5,1), type="res",
+            xlab="Distance to A1-Road", ylab="Residuals", 
+            main="Residuals (log ppb)")
+@
+
+\begin{figure}[!thb]
+<<fig=TRUE, echo=FALSE, height=8>>=
+<<figPredCV>>
+@ 
+\caption{The two top panes shows predictions for a left-out location, in
+  $\log$ and original scale (cf.\ Figure~\protect{\ref{fig:predict_example}}).
+  In the left pane of the third row predictions have been plotted against
+  observations; the points are coloured by location and grouping of data from
+  single locations can be seen. 
+  On the right predictions and observations of temporal
+  averages \protect{\eqref{eqn:LTA_obs_only}} are compared.
+  In the last row, the left pane shows a QQ-plot for normalised
+  residuals for the Gaussian model, coloured by season; the solid line gives
+  the theoretical behaviour of $\Normal{0}{1}$ residuals.
+  On the right, residuals (coloured by season) are plotted as a function of
+  distance to A1-roads; smooths, for each season and all data, have been
+  added to help identify any remaining structure.}
+\label{fig:CVpred}
+\end{figure}
+
+\clearpage
+
+\section{Outlook} \label{sec:Outlook}
+Having introduced the \proglang{R}-package \pkg{SpatioTemporal} and illustrated
+the main features of the package, we now discuss one possible future
+extension of the model.
+
+The computational feasibility of the model implemented here relies on
+the simplification of \eqref{eqn:full_likelihood} using, mainly, the matrix
+identity in \eqref{eqn:sigma_nu_woodbury}. This simplification
+will only lead to reduced computational cost if $\Sigma_\nu$ has a structure,
+e.g.\ block-diagonal, that allows for fast computations of $\Sigma_\nu^{-1}$.
+To obtain this block-diagonal structure an assumption of temporal independence
+in the residual $\nu(s,t)$-field is required. In the future we hope to relax
+this assumption, allowing for a temporally correlated
+$\nu(s,t)$-field. Computational feasibility can hopefully be retained by
+obtaining a sparse $\Sigma_\nu$ matrix through tapering \citep{Furrer06}.
+
+\section*{Acknowledgements}
+Data used in the example has been provided by  {\bf the Multi-Ethnic Study 
+of Atherosclerosis and Air Pollution (MESA Air)}. Details regarding the data
+can be found in \citet{Cohen09,Wilton10}.
+
+Although this tutorial and development of the package described there in
+has been funded wholly or in part by the United States Environmental 
+Protection Agency through {\bf assistance agreement CR-834077101-0} 
+and {\bf grant RD831697} to the University of Washington, it has not 
+been subjected to the Agency's required peer and policy review and 
+therefore does not necessarily reflect the views of the Agency 
+and no official endorsement should be inferred.
+
+Travel for Johan Lindstr\"om has been paid by 
+{\bf STINT Grant IG2005-2047}.
+
+Additional funding was provided by grants to the University of 
+Washington from the {\bf National Institute of Environmental Health 
+Sciences (P50 ES015915)} and the {\bf Health Effects Institute 
+(4749-RFA05-1A/06-10)}.
+
+%%%%%%BIBLIOGRAPHY%%%%%%%%%
+\bibliography{tutorial}
+
+\end{document}

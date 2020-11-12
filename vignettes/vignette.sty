@@ -1,0 +1,90 @@
+%pacakges
+\usepackage[british]{babel}
+\usepackage[latin1]{inputenc}
+\usepackage{verbatim}
+\usepackage{amsmath,amssymb,amsthm,amsfonts,amsbsy}
+%\usepackage{pstricks,pst-node,psfrag}
+\usepackage{fancyhdr}
+\usepackage{url}
+\usepackage{graphicx}
+\usepackage{hyphenat}
+\usepackage[unicode,linktocpage=true,bookmarksnumbered=true]{hyperref}
+\usepackage[round,comma,authoryear]{natbib}
+\usepackage[nofancy]{svninfo}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+%Formating for sweave stuff
+\usepackage{Sweave}
+% testing
+\DefineVerbatimEnvironment{Sinput}{Verbatim}{xleftmargin=1em,commandchars=\\\&;}
+\DefineVerbatimEnvironment{Soutput}{Verbatim}{xleftmargin=1em}
+\DefineVerbatimEnvironment{Scode}{Verbatim}{xleftmargin=1em}
+\fvset{listparameters={\setlength{\topsep}{0pt}}}
+\renewenvironment{Schunk}{\vspace{\topsep}}{\vspace{\topsep}}
+%\SweaveOpts{keep.source=TRUE}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+%rename the biliography to 'References'
+%commands valid for 'british' and 'english' babel options
+\addto\captionsbritish{%
+  \renewcommand{\refname}{References}}
+\addto\captionsenglish{%
+  \renewcommand{\refname}{References}}
+%alternative if babel is not used:
+%\renewcommand\refname{References}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%
+%redefine cleardoublepage to leave an absolutely empty (odd) page
+\makeatletter
+\def\cleardoublepage{\clearpage\if@twoside \ifodd\c@page\else
+\hbox{}
+\thispagestyle{empty}
+\newpage
+\if@twocolumn\hbox{}\newpage\fi\fi\fi}
+\makeatother
+
+%new command for section references with name and number
+\newcommand{\refNumberName}[1]{{\code{\#\#\# \autoref{#1} \nameref{#1} \#\#\#}%
+\vspace*{-\baselineskip}}}
+\def\sectionautorefname{Section}
+\def\subsectionautorefname{Section}
+\def\subsubsectionautorefname{Section}
+
+%new commands that warns for computationally intensive code
+\newcommand{\warnCode}{{ \vspace{-\baselineskip}\subsubsection*{WARNING: The following steps are time-consuming.}\vspace{-\baselineskip} }}
+%and provides alternatives
+\newcommand{\altCode}{{ \vspace{-1.5\baselineskip}\subsubsection*{ALTERNATIVE: Load pre-computed results.}\vspace{-\baselineskip} }}
+%and a statment marking the end of the options
+\newcommand{\altEnd}{{ \vspace{-1.5\baselineskip}\subsubsection*{End of alternative}}}
+
+%new commands for Prob, Exp, Variance and Covar.
+\newcommand{\proper}{\mathsf}
+\newcommand{\pE}{\proper{E}}
+\newcommand{\pV}{\proper{V}}
+%Define some distributions
+\newcommand{\Normal}[2]{\proper{N}\left(#1,#2\right)}
+% Use for points, vectors, and matrices:
+\newcommand{\mv}[1]{{\boldsymbol{#1}}}
+%transpose and integration infinitesimals
+\newcommand{\trsp}{\ensuremath{\top}}
+\newcommand{\md}{\ensuremath{\,\mathrm{d}}}
+%median
+\newcommand{\median}{\operatorname{median}}
+%argmax
+\newcommand{\argmax}[1]{\underset{#1}{\operatorname{argmax}}\ }
+%norm
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert}
+%determinant
+\renewcommand{\det}[1]{\left\lvert#1\right\rvert}
+%ordo
+\newcommand{\ordo}[1]{\ensuremath{\mathcal{O}\left(#1\right)}}
+%Caliographic M for model
+\newcommand{\M}{\mathcal{M}}
+%NOx and PM commands
+\newcommand{\no}[1]{\ensuremath{\text{NO}_\text{#1}}}
+\newcommand{\lno}[1]{\ensuremath{\log\ \no{#1}}}
+\newcommand{\PM}[1]{\ensuremath{\text{PM}_{#1}}}
+\newcommand{\code}{\texttt}
+
+\parindent=0mm
+\parskip=2mm
