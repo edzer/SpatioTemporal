@@ -1,8 +1,9 @@
 %pacakges
-\usepackage[british]{babel}
+%\usepackage[british]{babel}
 \usepackage[latin1]{inputenc}
 \usepackage{verbatim}
-\usepackage{amsmath,amssymb,amsthm,amsfonts,amsbsy}
+%\usepackage{amsmath,amssymb,amsthm,amsfonts,amsbsy}
+\usepackage{amsmath,amssymb,amsfonts,amsbsy}
 %\usepackage{pstricks,pst-node,psfrag}
 \usepackage{fancyhdr}
 \usepackage{url}
@@ -10,7 +11,7 @@
 \usepackage{hyphenat}
 \usepackage[unicode,linktocpage=true,bookmarksnumbered=true]{hyperref}
 \usepackage[round,comma,authoryear]{natbib}
-\usepackage[nofancy]{svninfo}
+%\usepackage[nofancy]{svninfo}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%
 %Formating for sweave stuff
@@ -26,12 +27,12 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%
 %rename the biliography to 'References'
 %commands valid for 'british' and 'english' babel options
-\addto\captionsbritish{%
-  \renewcommand{\refname}{References}}
-\addto\captionsenglish{%
-  \renewcommand{\refname}{References}}
+%\addto\captionsbritish{%
+%  \renewcommand{\refname}{References}}
+%\addto\captionsenglish{%
+%  \renewcommand{\refname}{References}}
 %alternative if babel is not used:
-%\renewcommand\refname{References}
+\renewcommand\refname{References}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%
 %redefine cleardoublepage to leave an absolutely empty (odd) page

@@ -129,7 +129,7 @@ simulate.STmodel <- function(object, nsim=1, seed=NULL, x, nugget.unobs=0, ...){
   ##simulate data from B
   for(j in 1:dimensions$m){
     Ind <- (1:dimensions$n) + (j-1)*dimensions$n
-    if( class(Rsigma.B)=="try-error" ){
+    if( inherits(Rsigma.B, "try-error")){
       B[,j,] <-  t( MASS::mvrnorm(n=nsim, mu=mu.B[Ind], Sigma=sigma.B[Ind,Ind]) )
     }else{
       R <- t(Rsigma.B[Ind,Ind])
@@ -164,7 +164,7 @@ simulate.STmodel <- function(object, nsim=1, seed=NULL, x, nugget.unobs=0, ...){
     X[,,k] <- X[,,k] + F %*% t(B[,,k])
   }
   ##simulate data from the nu fields
-  if( class(Rsigma.nu)=="try-error" ){
+  if( inherits(Rsigma.nu, "try-error")){
     e <- t( MASS::mvrnorm(n=dim(F)[1]*nsim, mu=rep(0,dim(X)[2]), Sigma=sigma.nu) )
   }else{
     ##simulate from the residuals

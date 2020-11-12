@@ -2,10 +2,11 @@
 %% need no \usepackage{Sweave.sty}
 
 %pacakges
-\usepackage[british]{babel}
+%\usepackage[english]{babel}
 \usepackage[latin1]{inputenc}
 \usepackage{verbatim}
-\usepackage{amsmath,amssymb,amsthm,amsfonts,amsbsy}
+%\usepackage{amsmath,amssymb,amsthm,amsfonts,amsbsy}
+\usepackage{amsmath,amssymb,amsfonts,amsbsy}
 \usepackage{url}
 
 \newcommand{\proper}{\mathsf}

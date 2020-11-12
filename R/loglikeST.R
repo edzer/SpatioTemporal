@@ -99,11 +99,11 @@ loglikeST <- function(x=NULL, STmodel, type="p", x.fixed=NULL){
   ##storing in-place to conserve memory
   sigma.B <- try( makeCholBlock(sigma.B, n.blocks=dimensions$m),
                  silent=TRUE)
-  if(class(sigma.B)=="try-error"){
+  if(inherits(sigma.B, "try-error")){
     return(-.Machine$double.xmax)
   }
   sigma.nu <- try( chol(sigma.nu), silent=TRUE)
-  if(class(sigma.nu)=="try-error"){
+  if(inherits(sigma.nu, "try-error")){
     return(-.Machine$double.xmax)
   }
   ##loglikelihood calculations follow:
@@ -149,7 +149,7 @@ loglikeST <- function(x=NULL, STmodel, type="p", x.fixed=NULL){
   sigma.B.Y <- as.matrix( t(F) %*% sigma.nu %*% F) + sigma.B
   ##calculate cholesky factor of inv(sigma.B|Y)
   sigma.B.Y <- try( chol(sigma.B.Y), silent=TRUE)
-  if( class(sigma.B.Y)=="try-error" ){
+  if(inherits(sigma.B.Y, "try-error")){
     return(-.Machine$double.xmax)
   }
 
@@ -181,7 +181,7 @@ loglikeST <- function(x=NULL, STmodel, type="p", x.fixed=NULL){
       calc.X.iS.X(STmodel$LUR, iS.X)
     ##calculate cholesky factor of inv(sigma.alpha|Y)
     i.sigma.alpha.Y <- try( chol(i.sigma.alpha.Y), silent=TRUE)
-    if(class(i.sigma.alpha.Y)=="try-error"){
+    if(inherits(i.sigma.alpha.Y, "try-error")){
       return(-.Machine$double.xmax)
     }
     if(type=="r"){
@@ -209,7 +209,7 @@ loglikeST <- function(x=NULL, STmodel, type="p", x.fixed=NULL){
                         t(M.hat.2) %*% M.hat.2)
       ##calculate cholesky factor of M.sigma.hat.M
       M.sigma.hat.M <- try( chol(M.sigma.hat.M), silent=TRUE)
-      if(class(M.sigma.hat.M)=="try-error"){
+      if(inherits(M.sigma.hat.M, "try-error")){
         return(-.Machine$double.xmax)
       }
       ##-log(det( M.sigma.hat.M )^.5)
@@ -305,7 +305,7 @@ loglikeSTnaive <- function(x=NULL, STmodel, type="p", x.fixed=NULL){
   ##calculate (block) cholesky factor of the matrices
   ##storing in-place to conserve memory
   sigma.nu <- try( chol(sigma.nu), silent=TRUE)
-  if(class(sigma.nu)=="try-error"){
+  if(inherits(sigma.nu, "try-error")){
     return(-.Machine$double.xmax)
   }
 
@@ -333,7 +333,7 @@ loglikeSTnaive <- function(x=NULL, STmodel, type="p", x.fixed=NULL){
     sigma.alt <- t(Ftmp) %*% Ftmp
     ##calculate cholesky factor (storing in-place to conserve memory)
     sigma.alt <- try( chol(sigma.alt), silent=TRUE)
-    if( class(sigma.alt)=="try-error" ){
+    if( inherits(sigma.alt, "try-error")){
       return(-.Machine$double.xmax)
     }
     ##-log(det(sigma.alt)^.5)
